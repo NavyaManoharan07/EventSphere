@@ -1,0 +1,17 @@
+# enforce LF for text files
+* text=auto eol=lf
+
+# treat common binary types as binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
+*.woff binary
+*.woff2 binary
+
+# Ensure package JSON and lockfiles are normalized
+*.json text
+package-lock.json text
+pnpm-lock.yaml text
+yarn.lock text

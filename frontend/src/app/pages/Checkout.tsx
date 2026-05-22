@@ -1,0 +1,185 @@
+import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router';
+import confetti from 'canvas-confetti';
+import { CreditCard, Lock, Check } from 'lucide-react';
+
+export function Checkout() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [step, setStep] = useState(1);
+
+  const handlePayment = () => {
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 }
+    });
+    setStep(2);
+    setTimeout(() => {
+      navigate('/app/tickets');
+    }, 3000);
+  };
+
+  if (step === 2) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="text-center p-12 rounded-3xl bg-white/70 backdrop-blur-lg border border-border">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-[#2CB67D] to-[#00C2FF] flex items-center justify-center">
+            <Check className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-3xl font-heading font-bold mb-4">Payment Successful!</h1>
+          <p className="text-muted-foreground mb-6">
+            Your ticket has been confirmed. Check your email for details.
+          </p>
+          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
+            Redirecting to tickets...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-4xl font-heading font-bold mb-2">Checkout</h1>
+        <p className="text-muted-foreground">Complete your purchase</p>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-6">
+          {/* Contact Information */}
+          <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
+            <h2 className="text-xl font-heading font-semibold mb-4">Contact Information</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">First Name</label>
+                <input
+                  type="text"
+                  placeholder="John"
+                  className="w-full px-4 py-3 rounded-xl bg-white/50 border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Last Name</label>
+                <input
+                  type="text"
+                  placeholder="Doe"
+                  className="w-full px-4 py-3 rounded-xl bg-white/50 border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-2">Email</label>
+                <input
+                  type="email"
+                  placeholder="john@example.com"
+                  className="w-full px-4 py-3 rounded-xl bg-white/50 border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Payment Method */}
+          <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
+            <h2 className="text-xl font-heading font-semibold mb-4">Payment Method</h2>
+
+            <div className="space-y-4 mb-6">
+              <button className="w-full p-4 rounded-xl border-2 border-primary bg-primary/5 flex items-center gap-3">
+                <CreditCard className="w-5 h-5 text-primary" />
+                <span className="font-medium">Credit / Debit Card</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Card Number</label>
+                <div className="relative">
+                  <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="4242 4242 4242 4242"
+                    className="w-full pl-11 pr-4 py-3 rounded-xl bg-white/50 border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Expiry Date</label>
+                  <input
+                    type="text"
+                    placeholder="MM/YY"
+                    className="w-full px-4 py-3 rounded-xl bg-white/50 border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">CVC</label>
+                  <input
+                    type="text"
+                    placeholder="123"
+                    className="w-full px-4 py-3 rounded-xl bg-white/50 border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Lock className="w-4 h-4" />
+            <span>Your payment information is secure and encrypted</span>
+          </div>
+        </div>
+
+        {/* Order Summary */}
+        <div className="lg:sticky lg:top-24 h-fit">
+          <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
+            <h2 className="text-xl font-heading font-semibold mb-4">Order Summary</h2>
+
+            <div className="mb-6 pb-6 border-b border-border">
+              <div className="flex gap-4">
+                <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-[#7F5AF0] to-[#00C2FF] flex-shrink-0"></div>
+                <div>
+                  <h3 className="font-heading font-semibold mb-1">AI Summit 2026</h3>
+                  <p className="text-sm text-muted-foreground">May 25, 2026</p>
+                  <p className="text-sm text-muted-foreground">General Admission × 1</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 mb-6">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Ticket Price</span>
+                <span>$79.00</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Service Fee</span>
+                <span>$5.00</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Tax</span>
+                <span>$6.72</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mb-6 py-4 border-t border-border">
+              <span className="font-heading font-semibold">Total</span>
+              <span className="text-2xl font-heading font-bold">$90.72</span>
+            </div>
+
+            <button
+              onClick={handlePayment}
+              className="w-full px-6 py-3 rounded-xl bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white font-medium hover:shadow-xl hover:shadow-primary/30 transition-all"
+            >
+              Complete Purchase
+            </button>
+
+            <p className="mt-4 text-xs text-center text-muted-foreground">
+              By completing this purchase, you agree to our terms and conditions
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
