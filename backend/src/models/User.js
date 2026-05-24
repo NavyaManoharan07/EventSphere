@@ -5,6 +5,7 @@ const userSchema = new mongoose.Schema({
   name: {
     type: String,
     required: [true, 'Please provide a name'],
+    trim: true,
   },
   email: {
     type: String,
@@ -25,18 +26,29 @@ const userSchema = new mongoose.Schema({
   },
 });
 
-// Encrypt password using bcrypt
+// Encrypt password using bcrypt before saving
 userSchema.pre('save', async function (next) {
+  // Only hash if password is new or modified
   if (!this.isModified('password')) {
-    next();
+    return next();
   }
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Match user entered password to hashed password in database
 userSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+  try {
+    return await bcrypt.compare(enteredPassword, this.password);
+  } catch (error) {
+    throw new Error('Password comparison failed');
+  }
 };
 
 module.exports = mongoose.model('User', userSchema);

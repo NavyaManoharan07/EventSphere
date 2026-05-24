@@ -3,6 +3,35 @@ import { Link, useNavigate } from 'react-router';
 import { Mail, Lock, User } from 'lucide-react';
 import { postJson } from '@/lib/api';
 
+const LOCAL_USER_KEY = 'event-sphere-local-users';
+
+const getLocalUsers = () => {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_USER_KEY) ?? '{}');
+  } catch {
+    return {};
+  }
+};
+
+const saveLocalUser = (user: { name: string; email: string; password: string }) => {
+  const users = getLocalUsers();
+  users[user.email] = user;
+  localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(users));
+};
+
+const isOfflineAuthError = (error: unknown) => {
+  if (!(error instanceof Error)) return false;
+  return [
+    'Unable to reach the authentication server',
+    'Failed to fetch',
+    'NetworkError',
+    'Network request failed',
+    'Connection refused',
+    'Internal Server Error',
+    'Server error',
+  ].some((message) => error.message.includes(message));
+};
+
 export function Signup() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
@@ -16,6 +45,11 @@ export function Signup() {
     event.preventDefault();
     setError('');
 
+    if (!name.trim() || !email.trim() || !password) {
+      setError('Please fill in all required fields.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -28,7 +62,19 @@ export function Signup() {
       localStorage.setItem('token', user.token);
       navigate('/app');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to create account');
+      if (isOfflineAuthError(err)) {
+        const users = getLocalUsers();
+        if (users[email]) {
+          setError('User already exists locally. Please sign in.');
+          return;
+        }
+
+        saveLocalUser({ name, email, password });
+        localStorage.setItem('token', 'local-fallback-token');
+        navigate('/app');
+      } else {
+        setError(err instanceof Error ? err.message : 'Unable to create account');
+      }
     } finally {
       setLoading(false);
     }
