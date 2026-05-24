@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const mongoose = require('mongoose');
 const authRoutes = require('./routes/authRoutes');
 
 const app = express();
@@ -14,7 +15,36 @@ app.use('/api/auth', authRoutes);
 
 // Health check
 app.get('/', (req, res) => {
-  res.send('API is running...');
+  res.json({ 
+    status: 'API is running',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+  console.error('Error:', error);
+  
+  if (error.name === 'ValidationError') {
+    return res.status(400).json({ 
+      message: Object.values(error.errors).map(e => e.message).join(', ') 
+    });
+  }
+  
+  if (error.code === 11000) {
+    return res.status(400).json({ 
+      message: 'Duplicate field value entered' 
+    });
+  }
+  
+  res.status(error.statusCode || 500).json({ 
+    message: error.message || 'Internal Server Error' 
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ message: 'Route not found' });
 });
 
 module.exports = app;
