@@ -1,23 +1,52 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import confetti from 'canvas-confetti';
 import { CreditCard, Lock, Check } from 'lucide-react';
+import { authPostJson, getJson } from '@/lib/api';
 
 export function Checkout() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [event, setEvent] = useState<any>(null);
+  const [error, setError] = useState('');
 
-  const handlePayment = () => {
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 }
-    });
-    setStep(2);
-    setTimeout(() => {
-      navigate('/app/tickets');
-    }, 3000);
+  useEffect(() => {
+    const loadEvent = async () => {
+      if (!id) return;
+      try {
+        const data = await getJson(`/events/${id}`);
+        setEvent(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to load event');
+      }
+    };
+
+    loadEvent();
+  }, [id]);
+
+  const handlePayment = async () => {
+    if (!id) {
+      setError('Missing event information.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await authPostJson(`/events/${id}/book`, {});
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+      setStep(2);
+      setTimeout(() => {
+        navigate('/app/tickets');
+      }, 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to book ticket');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (step === 2) {
@@ -28,12 +57,10 @@ export function Checkout() {
             <Check className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-3xl font-heading font-bold mb-4">Payment Successful!</h1>
-          <p className="text-muted-foreground mb-6">
-            Your ticket has been confirmed. Check your email for details.
-          </p>
+          <p className="text-muted-foreground mb-6">Your ticket has been confirmed. Redirecting to tickets...</p>
           <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
-            Redirecting to tickets...
+            Redirecting...
           </div>
         </div>
       </div>
@@ -47,9 +74,14 @@ export function Checkout() {
         <p className="text-muted-foreground">Complete your purchase</p>
       </div>
 
+      {error && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
-          {/* Contact Information */}
           <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
             <h2 className="text-xl font-heading font-semibold mb-4">Contact Information</h2>
             <div className="grid md:grid-cols-2 gap-4">
@@ -80,10 +112,8 @@ export function Checkout() {
             </div>
           </div>
 
-          {/* Payment Method */}
           <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
             <h2 className="text-xl font-heading font-semibold mb-4">Payment Method</h2>
-
             <div className="space-y-4 mb-6">
               <button className="w-full p-4 rounded-xl border-2 border-primary bg-primary/5 flex items-center gap-3">
                 <CreditCard className="w-5 h-5 text-primary" />
@@ -131,17 +161,15 @@ export function Checkout() {
           </div>
         </div>
 
-        {/* Order Summary */}
         <div className="lg:sticky lg:top-24 h-fit">
           <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
             <h2 className="text-xl font-heading font-semibold mb-4">Order Summary</h2>
-
             <div className="mb-6 pb-6 border-b border-border">
               <div className="flex gap-4">
                 <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-[#7F5AF0] to-[#00C2FF] flex-shrink-0"></div>
                 <div>
-                  <h3 className="font-heading font-semibold mb-1">AI Summit 2026</h3>
-                  <p className="text-sm text-muted-foreground">May 25, 2026</p>
+                  <h3 className="font-heading font-semibold mb-1">{event?.title ?? 'Selected Event'}</h3>
+                  <p className="text-sm text-muted-foreground">{event?.startDate ? new Date(event.startDate).toLocaleDateString() : 'TBD'}</p>
                   <p className="text-sm text-muted-foreground">General Admission × 1</p>
                 </div>
               </div>
@@ -150,7 +178,7 @@ export function Checkout() {
             <div className="space-y-2 mb-6">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Ticket Price</span>
-                <span>$79.00</span>
+                <span>${event?.price ?? '0.00'}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Service Fee</span>
@@ -164,19 +192,18 @@ export function Checkout() {
 
             <div className="flex items-center justify-between mb-6 py-4 border-t border-border">
               <span className="font-heading font-semibold">Total</span>
-              <span className="text-2xl font-heading font-bold">$90.72</span>
+              <span className="text-2xl font-heading font-bold">${event ? Number(event.price) + 11.72 : '0.00'}</span>
             </div>
 
             <button
               onClick={handlePayment}
-              className="w-full px-6 py-3 rounded-xl bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white font-medium hover:shadow-xl hover:shadow-primary/30 transition-all"
+              disabled={loading}
+              className="w-full px-6 py-3 rounded-xl bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white font-medium hover:shadow-xl hover:shadow-primary/30 transition-all disabled:opacity-50"
             >
-              Complete Purchase
+              {loading ? 'Processing...' : 'Complete Purchase'}
             </button>
 
-            <p className="mt-4 text-xs text-center text-muted-foreground">
-              By completing this purchase, you agree to our terms and conditions
-            </p>
+            <p className="mt-4 text-xs text-center text-muted-foreground">By completing this purchase, you agree to our terms and conditions</p>
           </div>
         </div>
       </div>

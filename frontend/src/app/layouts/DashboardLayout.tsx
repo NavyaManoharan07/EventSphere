@@ -1,8 +1,24 @@
+import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router';
 import { Search, Bell, MessageSquare, User, Home, Compass, Ticket, Users, MessageCircle, Trophy, Briefcase, Settings as SettingsIcon, Sparkles } from 'lucide-react';
+import { authGetJson } from '@/lib/api';
 
 export function DashboardLayout() {
   const location = useLocation();
+  const [xpPoints, setXpPoints] = useState(0);
+
+  useEffect(() => {
+    const loadXp = async () => {
+      try {
+        const data = await authGetJson<{ stats?: { totalXp?: number } }>('/events/rewards/summary');
+        setXpPoints(data.stats?.totalXp ?? 0);
+      } catch {
+        setXpPoints(0);
+      }
+    };
+
+    loadXp();
+  }, []);
 
   const navItems = [
     { path: '/app', icon: Home, label: 'Home' },
@@ -50,13 +66,13 @@ export function DashboardLayout() {
               <Bell className="w-5 h-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-[#FF6B9D] rounded-full"></span>
             </Link>
-            <button className="relative p-2 hover:bg-accent rounded-lg transition-colors">
+            <Link to="/app/messages" className="relative p-2 hover:bg-accent rounded-lg transition-colors">
               <MessageSquare className="w-5 h-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-[#00C2FF] rounded-full"></span>
-            </button>
+            </Link>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#7F5AF0]/10 to-[#00C2FF]/10 border border-[#7F5AF0]/20">
               <Sparkles className="w-4 h-4 text-[#7F5AF0]" />
-              <span className="text-sm font-medium">1,250 XP</span>
+              <span className="text-sm font-medium">{xpPoints.toLocaleString()} XP</span>
             </div>
             <Link to="/app/settings" className="p-2 hover:bg-accent rounded-full transition-colors">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#7F5AF0] to-[#00C2FF] flex items-center justify-center">
