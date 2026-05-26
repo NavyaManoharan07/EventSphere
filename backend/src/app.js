@@ -10,6 +10,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Database status middleware - check if DB is connected before running auth routes
+app.use('/api/auth', (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ 
+      message: 'Database connection is not available. Please check your MongoDB connection settings.' 
+    });
+  }
+  next();
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 

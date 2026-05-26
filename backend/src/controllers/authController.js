@@ -1,10 +1,6 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-
-// In-memory fallback store for development when DB is unreachable
-const localUsers = {}; // { email: { name, email, passwordHash, _id } }
 
 // Generate JWT
 const generateToken = (id) => {
@@ -31,22 +27,7 @@ exports.registerUser = async (req, res, next) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
 
-    const dbConnected = mongoose.connection.readyState === 1;
-
-    if (!dbConnected) {
-      // Use in-memory fallback
-      if (localUsers[email]) {
-        return res.status(400).json({ message: 'Email already registered (offline)' });
-      }
-
-      const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash(password, salt);
-      const id = `local-${Date.now()}`;
-      localUsers[email] = { name, email, passwordHash, _id: id };
-      return res.status(201).json({ _id: id, name, email, token: generateToken(id) });
-    }
-
-    // Check if user exists in DB
+    // Check if user exists
     const userExists = await User.findOne({ email });
 
     if (userExists) {
@@ -54,7 +35,11 @@ exports.registerUser = async (req, res, next) => {
     }
 
     // Create user
-    const user = await User.create({ name, email, password });
+    const user = await User.create({
+      name,
+      email,
+      password,
+    });
 
     if (user) {
       return res.status(201).json({
@@ -88,24 +73,8 @@ exports.loginUser = async (req, res, next) => {
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
     }
-    const dbConnected = mongoose.connection.readyState === 1;
 
-    if (!dbConnected) {
-      // Offline/in-memory authentication
-      const local = localUsers[email];
-      if (!local) {
-        return res.status(401).json({ message: 'Invalid email or password (offline)' });
-      }
-
-      const match = await bcrypt.compare(password, local.passwordHash);
-      if (!match) {
-        return res.status(401).json({ message: 'Invalid email or password (offline)' });
-      }
-
-      return res.status(200).json({ _id: local._id, name: local.name, email: local.email, token: generateToken(local._id) });
-    }
-
-    // Check for user email in DB
+    // Check for user email
     const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
@@ -118,7 +87,12 @@ exports.loginUser = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    return res.status(200).json({ _id: user._id, name: user.name, email: user.email, token: generateToken(user._id) });
+    return res.status(200).json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      token: generateToken(user._id),
+    });
   } catch (error) {
     console.error('Login error:', error);
     next(error);
