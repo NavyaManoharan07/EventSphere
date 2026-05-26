@@ -408,11 +408,19 @@ exports.createConnection = async (req, res, next) => {
     });
 
     if (existing) {
+      const shouldAwardConnection = existing.status !== 'accepted';
       existing.status = 'accepted';
       existing.following = true;
       existing.matchScore = Number(req.body.matchScore) || existing.matchScore;
       if (req.body.communityId) existing.community = req.body.communityId;
       await existing.save();
+      await User.updateMany(
+        { _id: { $in: [req.user.id, receiverId] } },
+        {
+          ...(shouldAwardConnection ? { $inc: { 'behavior.connectionsMade': 1 } } : {}),
+          $addToSet: { 'behavior.activityDates': new Date().toISOString().slice(0, 10) },
+        }
+      );
       return res.status(200).json(existing);
     }
 
@@ -425,10 +433,33 @@ exports.createConnection = async (req, res, next) => {
       following: true,
     });
 
+    await User.updateMany(
+      { _id: { $in: [req.user.id, receiverId] } },
+      {
+        $inc: { 'behavior.connectionsMade': 1 },
+        $addToSet: { 'behavior.activityDates': new Date().toISOString().slice(0, 10) },
+      }
+    );
+
     return res.status(201).json(connection);
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ message: 'Connection request already exists' });
+      const receiverId = req.body.receiverId;
+      const existing = await Connection.findOne({
+        $or: [
+          { sender: req.user.id, receiver: receiverId },
+          { sender: receiverId, receiver: req.user.id },
+        ],
+      });
+
+      if (existing) {
+        existing.status = 'accepted';
+        existing.following = true;
+        await existing.save();
+        return res.status(200).json(existing);
+      }
+
+      return res.status(200).json({ message: 'Connection already exists' });
     }
     next(error);
   }

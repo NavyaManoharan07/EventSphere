@@ -82,6 +82,10 @@ const userSchema = new mongoose.Schema({
       type: Number,
       default: 0,
     },
+    activityDates: {
+      type: [String],
+      default: [],
+    },
   },
   xp: {
     type: Number,

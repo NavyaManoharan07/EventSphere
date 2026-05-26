@@ -73,6 +73,7 @@ exports.connectWithUser = async (req, res, next) => {
     });
 
     if (existing) {
+      const shouldAwardConnection = existing.status !== 'accepted';
       existing.status = 'accepted';
       existing.following = true;
       if (req.body.matchScore != null) existing.matchScore = Number(req.body.matchScore) || existing.matchScore;
@@ -80,6 +81,13 @@ exports.connectWithUser = async (req, res, next) => {
         existing.community = req.body.communityId;
       }
       await existing.save();
+      await User.updateMany(
+        { _id: { $in: [currentUserId, targetUserId] } },
+        {
+          ...(shouldAwardConnection ? { $inc: { 'behavior.connectionsMade': 1 } } : {}),
+          $addToSet: { 'behavior.activityDates': new Date().toISOString().slice(0, 10) },
+        }
+      );
       return res.status(200).json({ connection: existing, connected: true, following: true });
     }
 
@@ -92,8 +100,31 @@ exports.connectWithUser = async (req, res, next) => {
       following: true,
     });
 
+    await User.updateMany(
+      { _id: { $in: [currentUserId, targetUserId] } },
+      {
+        $inc: { 'behavior.connectionsMade': 1 },
+        $addToSet: { 'behavior.activityDates': new Date().toISOString().slice(0, 10) },
+      }
+    );
+
     return res.status(201).json({ connection, connected: true, following: true });
   } catch (error) {
+    if (error.code === 11000) {
+      const existing = await Connection.findOne({
+        $or: [
+          { sender: currentUserId, receiver: targetUserId },
+          { sender: targetUserId, receiver: currentUserId },
+        ],
+      });
+
+      if (existing) {
+        existing.status = 'accepted';
+        existing.following = true;
+        await existing.save();
+        return res.status(200).json({ connection: existing, connected: true, following: true });
+      }
+    }
     next(error);
   }
 };
