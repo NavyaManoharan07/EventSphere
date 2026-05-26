@@ -1,10 +1,21 @@
-const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || '/api';
+const rawApiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL?.trim() || '/api';
 
 export const API_BASE_URL = rawApiBaseUrl.endsWith('/api')
   ? rawApiBaseUrl
   : `${rawApiBaseUrl.replace(/\/$/, '')}/api`;
 
 const getAuthToken = () => localStorage.getItem('token') ?? '';
+
+const LOCAL_USER_KEY = 'event-sphere-local-users';
+
+const getLocalUserForToken = (token: string) => {
+  try {
+    const users = JSON.parse(localStorage.getItem(LOCAL_USER_KEY) ?? '{}');
+    return Object.values(users).find((u: any) => u.token === token) as any | undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 const buildHeaders = (includeAuth = false) => {
   const headers: Record<string, string> = {
@@ -15,6 +26,20 @@ const buildHeaders = (includeAuth = false) => {
     const token = getAuthToken();
     if (token) {
       headers.Authorization = `Bearer ${token}`;
+      // If this is a local fallback token, include the local user payload so the backend
+      // can accept and persist the offline user for protected routes.
+      if (token.startsWith('local-')) {
+        const localUser = getLocalUserForToken(token);
+        if (localUser) {
+          try {
+            const json = JSON.stringify(localUser);
+            const encoded = typeof window !== 'undefined' ? window.btoa(json) : '';
+            headers['X-Local-User'] = encoded;
+          } catch {
+            // ignore encoding errors
+          }
+        }
+      }
     }
   }
 

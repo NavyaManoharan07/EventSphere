@@ -7,6 +7,8 @@ const authRoutes = require('./routes/authRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const communityRoutes = require('./routes/communityRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const socialRoutes = require('./routes/socialRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 
@@ -20,6 +22,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/communities', communityRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/social', socialRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
 if (fs.existsSync(frontendDistPath)) {

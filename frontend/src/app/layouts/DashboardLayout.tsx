@@ -6,22 +6,30 @@ import { authGetJson } from '@/lib/api';
 export function DashboardLayout() {
   const location = useLocation();
   const [xpPoints, setXpPoints] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState('');
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   useEffect(() => {
-    const loadXp = async () => {
+    const loadHeaderData = async () => {
       // Rewards/summary is protected on the backend; avoid calling it when not authenticated.
       const token = localStorage.getItem('token');
       if (!token) return;
 
       try {
-        const data = await authGetJson<{ stats?: { totalXp?: number } }>('/events/rewards/summary');
-        setXpPoints(data.stats?.totalXp ?? 0);
+        const [me, rewards, conversations] = await Promise.all([
+          authGetJson<{ _id?: string; id?: string }>('/auth/me'),
+          authGetJson<{ stats?: { totalXp?: number } }>('/events/rewards/summary'),
+          authGetJson<Array<{ unreadCount?: number }>>('/messages/conversations'),
+        ]);
+        setCurrentUserId(String(me._id || me.id || ''));
+        setXpPoints(rewards.stats?.totalXp ?? 0);
+        setUnreadMessages(conversations.reduce((total, item) => total + Number(item.unreadCount || 0), 0));
       } catch {
         setXpPoints(0);
       }
     };
 
-    loadXp();
+    loadHeaderData();
   }, []);
 
 
@@ -73,13 +81,13 @@ export function DashboardLayout() {
             </Link>
             <Link to="/app/messages" className="relative p-2 hover:bg-accent rounded-lg transition-colors">
               <MessageSquare className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-[#00C2FF] rounded-full"></span>
+              {unreadMessages > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-[#00C2FF] rounded-full"></span>}
             </Link>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#7F5AF0]/10 to-[#00C2FF]/10 border border-[#7F5AF0]/20">
               <Sparkles className="w-4 h-4 text-[#7F5AF0]" />
               <span className="text-sm font-medium">{xpPoints.toLocaleString()} XP</span>
             </div>
-            <Link to="/app/settings" className="p-2 hover:bg-accent rounded-full transition-colors">
+            <Link to={currentUserId ? `/app/profile/${currentUserId}` : '/app/settings'} className="p-2 hover:bg-accent rounded-full transition-colors">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#7F5AF0] to-[#00C2FF] flex items-center justify-center">
                 <User className="w-4 h-4 text-white" />
               </div>

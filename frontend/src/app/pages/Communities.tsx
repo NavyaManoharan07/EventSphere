@@ -36,6 +36,7 @@ export function Communities() {
   const [selectedCommunityId, setSelectedCommunityId] = useState('');
   const [feed, setFeed] = useState<any>(null);
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
+  const [teamInvitations, setTeamInvitations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [feedLoading, setFeedLoading] = useState(false);
   const [error, setError] = useState('');
@@ -74,6 +75,12 @@ export function Communities() {
       ]);
       setFeed(feedData);
       setAiSuggestions(suggestionsData.suggestions || []);
+      try {
+        const invites = await authGetJson<any[]>('/communities/team-invitations');
+        setTeamInvitations(invites || []);
+      } catch {
+        setTeamInvitations([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load community feed');
     } finally {
@@ -157,14 +164,16 @@ export function Communities() {
 
   const connectWithMember = async (person: any) => {
     try {
-      await authPostJson('/communities/connections', {
+      await authPostJson('/communities/team-invitations', {
         receiverId: person.id,
         communityId: selectedCommunityId,
-        matchScore: person.matchScore,
+        message: `Want to team up in ${feed?.community?.name || 'this community'}?`,
       });
-      setMessage(`Connection request sent to ${person.name}.`);
+      setMessage(`Team invitation sent to ${person.name}.`);
+      const invites = await authGetJson<any[]>('/communities/team-invitations');
+      setTeamInvitations(invites || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to send connection request');
+      setError(err instanceof Error ? err.message : 'Unable to send team invitation');
     }
   };
 
@@ -309,6 +318,21 @@ export function Communities() {
           </div>
 
           <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
+            <h3 className="font-heading font-semibold mb-4">Team Invitations</h3>
+            <div className="space-y-3">
+              {teamInvitations.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No team invitations yet.</div>
+              ) : teamInvitations.slice(0, 5).map((invite) => (
+                <div key={invite._id} className="p-3 rounded-xl bg-white/50 border border-border">
+                  <div className="font-medium text-sm">{invite.sender?.name} → {invite.receiver?.name}</div>
+                  <div className="text-xs text-muted-foreground">{invite.community?.name || invite.event?.title || 'Team request'} • {invite.status}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{invite.message}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-heading font-semibold">Community Workspace</h2>
               {feed?.community && <span className="text-sm text-muted-foreground">{feed.community.name}</span>}
@@ -398,6 +422,45 @@ export function Communities() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-white/50 border border-border">
+                    <h3 className="font-heading font-semibold mb-3">Shared Resources</h3>
+                    <div className="space-y-3">
+                      {(feed?.resources || []).length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No resources shared yet.</div>
+                      ) : feed.resources.map((item: any) => (
+                        <a
+                          key={item.id}
+                          href={item.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block p-3 rounded-lg bg-white/70 border border-border hover:bg-white transition-all"
+                        >
+                          <div className="font-medium text-sm">{item.title}</div>
+                          <div className="text-xs text-muted-foreground">Shared by {item.uploadedBy}</div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-white/50 border border-border">
+                    <h3 className="font-heading font-semibold mb-3">Members</h3>
+                    <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                      {(feed?.members || []).length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No members yet.</div>
+                      ) : feed.members.map((member: any) => (
+                        <div key={member.id || member.name} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/70 border border-border">
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm truncate">{member.name}</div>
+                            <div className="text-xs text-muted-foreground truncate">{member.city || member.role}</div>
+                          </div>
+                          <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs capitalize">{member.role}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

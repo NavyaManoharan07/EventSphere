@@ -20,6 +20,20 @@ const ticketSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  ticketType: {
+    type: String,
+    default: 'General',
+    trim: true,
+  },
+  quantity: {
+    type: Number,
+    default: 1,
+    min: 1,
+  },
+  amountPaid: {
+    type: Number,
+    default: 0,
+  },
   status: {
     type: String,
     enum: ['booked', 'checked-in'],

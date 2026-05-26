@@ -12,6 +12,12 @@ interface Conversation {
   unreadCount: number;
 }
 
+interface UserProfile {
+  id: string;
+  name: string;
+  profilePhoto?: string;
+}
+
 interface Message {
   _id: string;
   sender: string;
@@ -58,12 +64,23 @@ export function Messages() {
       setConversations(data);
       
       if (initialUserId && !selectedUser) {
-        const existingConv = data.find(c => c._id === initialUserId);
+        const existingConv = data.find((c) => c._id === initialUserId);
         if (existingConv) {
           setSelectedUser(existingConv);
         } else {
-          // If not in conversations yet, it's a new one. We'd need to fetch user info.
-          // For now, let's just handle existing ones or wait for first message.
+          try {
+            const profile = await authGetJson<UserProfile>(`/auth/user/${initialUserId}`);
+            setSelectedUser({
+              _id: profile.id,
+              name: profile.name,
+              profilePhoto: profile.profilePhoto,
+              lastMessage: '',
+              lastMessageTime: new Date().toISOString(),
+              unreadCount: 0,
+            });
+          } catch (profileError) {
+            console.error('Failed to load user profile', profileError);
+          }
         }
       }
     } catch (err) {

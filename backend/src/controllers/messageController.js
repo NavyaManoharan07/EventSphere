@@ -1,5 +1,6 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
+const Connection = require('../models/Connection');
 
 // @desc    Send a message
 // @route   POST /api/messages
@@ -118,7 +119,43 @@ exports.getConversations = async (req, res) => {
       },
     ]);
 
-    res.status(200).json(conversations);
+    const connectedPeople = await Connection.find({
+      status: 'accepted',
+      $or: [{ sender: currentUserId }, { receiver: currentUserId }],
+    })
+      .populate('sender', 'name profilePhoto')
+      .populate('receiver', 'name profilePhoto')
+      .lean();
+
+    const conversationMap = new Map(conversations.map((conversation) => [
+      conversation._id.toString(),
+      conversation,
+    ]));
+
+    connectedPeople.forEach((connection) => {
+      const person = connection.sender?._id?.toString() === currentUserId.toString()
+        ? connection.receiver
+        : connection.sender;
+
+      if (!person?._id) return;
+      const personId = person._id.toString();
+
+      if (!conversationMap.has(personId)) {
+        conversationMap.set(personId, {
+          _id: person._id,
+          lastMessage: 'Connected on EventSphere',
+          lastMessageTime: connection.updatedAt || connection.createdAt,
+          unreadCount: 0,
+          name: person.name,
+          profilePhoto: person.profilePhoto,
+        });
+      }
+    });
+
+    const payload = Array.from(conversationMap.values())
+      .sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
+
+    res.status(200).json(payload);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

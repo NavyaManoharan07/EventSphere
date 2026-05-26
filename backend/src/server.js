@@ -11,8 +11,8 @@ const startServer = async () => {
   try {
     try {
       await connectDB();
-    } catch (dbErr) {
-      console.warn('Warning: database connection failed. Starting server with in-memory fallback for auth routes.');
+    } catch (dbError) {
+      console.warn('Warning: database connection failed. Starting server with fallback mode.');
     }
 
     const server = app.listen(PORT, () => {
