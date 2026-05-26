@@ -11,6 +11,8 @@ const {
   getNetworkingSuggestions,
   checkInTicket,
   getEventTickets,
+  createRazorpayOrder,
+  verifyRazorpayPayment,
 } = require('../controllers/eventController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -23,6 +25,8 @@ router.get('/', getEvents);
 router.post('/', protect, createEvent);
 router.get('/:eventId', getEventById);
 router.post('/:eventId/book', protect, bookTicket);
+router.post('/:eventId/create-order', protect, createRazorpayOrder);
+router.post('/verify-payment', protect, verifyRazorpayPayment);
 router.get('/:eventId/tickets', protect, getEventTickets);
 
 module.exports = router;

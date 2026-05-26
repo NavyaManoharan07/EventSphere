@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import confetti from 'canvas-confetti';
 import { CreditCard, Lock, Check } from 'lucide-react';
+import useRazorpay from "react-razorpay";
 import { authPostJson, getJson } from '@/lib/api';
 
 export function Checkout() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [Razorpay] = useRazorpay();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [event, setEvent] = useState<any>(null);
@@ -27,7 +29,7 @@ export function Checkout() {
   }, [id]);
 
   const handlePayment = async () => {
-    if (!id) {
+    if (!id || !event) {
       setError('Missing event information.');
       return;
     }
@@ -36,14 +38,55 @@ export function Checkout() {
     setError('');
 
     try {
-      await authPostJson(`/events/${id}/book`, {});
-      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-      setStep(2);
-      setTimeout(() => {
-        navigate('/app/tickets');
-      }, 3000);
+      // 1. Create Razorpay Order
+      const order = await authPostJson(`/events/${id}/create-order`, {});
+      
+      const options = {
+        key: "rzp_test_StonSOA2AB0Ncq", // In production this should be an env var
+        amount: order.amount,
+        currency: order.currency,
+        name: "EventSphere",
+        description: `Ticket for ${event.title}`,
+        order_id: order.id,
+        handler: async (response: any) => {
+          try {
+            setLoading(true);
+            // 2. Verify Payment
+            await authPostJson("/events/verify-payment", {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              eventId: id,
+            });
+
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            setStep(2);
+            setTimeout(() => {
+              navigate('/app/tickets');
+            }, 3000);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Payment verification failed');
+          } finally {
+            setLoading(false);
+          }
+        },
+        prefill: {
+          name: "", // Can be filled if user info is available
+          email: "",
+          contact: "",
+        },
+        theme: {
+          color: "#7F5AF0",
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (response: any) {
+        setError(response.error.description);
+      });
+      rzp.open();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to book ticket');
+      setError(err instanceof Error ? err.message : 'Unable to initiate payment');
     } finally {
       setLoading(false);
     }

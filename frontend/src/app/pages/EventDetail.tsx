@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { Calendar, MapPin, Users, Clock, Share2, Heart, Bookmark, Sparkles } from 'lucide-react';
-import { getJson } from '@/lib/api';
+
+const getJson = async (url: string) => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to fetch ${url}`);
+  return response.json();
+};
 
 export function EventDetail() {
   const { id } = useParams();
@@ -60,13 +65,13 @@ export function EventDetail() {
         </div>
 
         <div className="absolute top-6 right-6 flex gap-3">
-          <button className="w-12 h-12 rounded-full bg-white/90 backdrop-blur flex items-center justify-center hover:scale-110 transition-transform">
+          <button type="button" title="Add to favorites" className="w-12 h-12 rounded-full bg-white/90 backdrop-blur flex items-center justify-center hover:scale-110 transition-transform">
             <Heart className="w-5 h-5" />
           </button>
-          <button className="w-12 h-12 rounded-full bg-white/90 backdrop-blur flex items-center justify-center hover:scale-110 transition-transform">
+          <button type="button" title="Bookmark event" className="w-12 h-12 rounded-full bg-white/90 backdrop-blur flex items-center justify-center hover:scale-110 transition-transform">
             <Bookmark className="w-5 h-5" />
           </button>
-          <button className="w-12 h-12 rounded-full bg-white/90 backdrop-blur flex items-center justify-center hover:scale-110 transition-transform">
+          <button type="button" title="Share event" className="w-12 h-12 rounded-full bg-white/90 backdrop-blur flex items-center justify-center hover:scale-110 transition-transform">
             <Share2 className="w-5 h-5" />
           </button>
         </div>

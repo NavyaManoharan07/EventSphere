@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const Razorpay = require('razorpay');
 const Event = require('../models/Event');
 const Ticket = require('../models/Ticket');
 const User = require('../models/User');
@@ -803,6 +804,89 @@ exports.getEventTickets = async (req, res, next) => {
       .lean();
 
     return res.status(200).json(tickets);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.createRazorpayOrder = async (req, res, next) => {
+  try {
+    const event = await Event.findById(req.params.eventId);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const instance = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+
+    const options = {
+      amount: Math.round(event.price * 100), // amount in smallest currency unit
+      currency: 'INR',
+      receipt: `receipt_${crypto.randomBytes(10).toString('hex')}`,
+    };
+
+    const order = await instance.orders.create(options);
+
+    if (!order) {
+      return res.status(500).json({ message: 'Failed to create Razorpay order' });
+    }
+
+    res.status(200).json(order);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.verifyRazorpayPayment = async (req, res, next) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      eventId
+    } = req.body;
+
+    const sign = razorpay_order_id + '|' + razorpay_payment_id;
+    const expectedSign = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(sign.toString())
+      .digest('hex');
+
+    if (razorpay_signature !== expectedSign) {
+      return res.status(400).json({ message: 'Invalid payment signature' });
+    }
+
+    // Payment verified, now create ticket
+    const event = await Event.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const ticketCode = crypto.randomUUID();
+    const qrPayload = buildQrPayload({
+      ticketCode,
+      eventId: event._id.toString(),
+      attendeeId: req.user.id,
+    });
+
+    const ticket = await Ticket.create({
+      event: event._id,
+      attendee: req.user.id,
+      ticketCode,
+      qrPayload,
+    });
+
+    res.status(201).json({
+      message: 'Payment verified and ticket booked successfully',
+      ticketId: ticket._id,
+      event: event._id,
+      ticketCode,
+      qrPayload,
+      status: ticket.status,
+      bookedAt: ticket.bookedAt,
+    });
   } catch (error) {
     next(error);
   }

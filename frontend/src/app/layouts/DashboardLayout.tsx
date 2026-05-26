@@ -9,6 +9,10 @@ export function DashboardLayout() {
 
   useEffect(() => {
     const loadXp = async () => {
+      // Rewards/summary is protected on the backend; avoid calling it when not authenticated.
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
       try {
         const data = await authGetJson<{ stats?: { totalXp?: number } }>('/events/rewards/summary');
         setXpPoints(data.stats?.totalXp ?? 0);
@@ -19,6 +23,7 @@ export function DashboardLayout() {
 
     loadXp();
   }, []);
+
 
   const navItems = [
     { path: '/app', icon: Home, label: 'Home' },
