@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Users, Plus, TrendingUp, MessageSquare, Calendar, Upload, Sparkles, Link as LinkIcon, Trophy } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Users, Plus, TrendingUp, MessageSquare, Calendar, Upload, Sparkles, Link as LinkIcon, Trophy, Send } from 'lucide-react';
 import { authGetJson, authPostJson } from '@/lib/api';
 
 type Community = {
@@ -45,6 +45,7 @@ export function Communities() {
   const [newCommunity, setNewCommunity] = useState({ name: '', description: '', category: '', type: 'interest' });
   const [discussion, setDiscussion] = useState({ title: '', message: '', type: 'discussion' });
   const [resource, setResource] = useState({ title: '', fileUrl: '' });
+  const workspaceRef = useRef<HTMLDivElement>(null);
 
   const loadCommunities = async () => {
     setLoading(true);
@@ -304,7 +305,10 @@ export function Communities() {
                         </div>
 
                         <button
-                          onClick={() => setSelectedCommunityId(community.id)}
+                          onClick={() => {
+                            setSelectedCommunityId(community.id);
+                            workspaceRef.current?.scrollIntoView({ behavior: 'smooth' });
+                          }}
                           className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white text-sm hover:shadow-lg transition-all"
                         >
                           Open Community
@@ -332,7 +336,7 @@ export function Communities() {
             </div>
           </div>
 
-          <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
+          <div ref={workspaceRef} className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-heading font-semibold">Community Workspace</h2>
               {feed?.community && <span className="text-sm text-muted-foreground">{feed.community.name}</span>}
@@ -345,121 +349,159 @@ export function Communities() {
             ) : feedLoading ? (
               <div className="p-4 rounded-xl bg-white/50 border border-border">Loading community workspace...</div>
             ) : (
-              <div className="space-y-6">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl bg-white/50 border border-border">
-                    <h3 className="font-heading font-semibold mb-3">Create Discussion</h3>
-                    <input
-                      value={discussion.title}
-                      onChange={(event) => setDiscussion({ ...discussion, title: event.target.value })}
-                      placeholder="Anyone interested in AI healthcare startups?"
-                      className="w-full mb-3 px-4 py-2 rounded-lg bg-white/70 border border-border focus:outline-none"
-                    />
-                    <textarea
-                      value={discussion.message}
-                      onChange={(event) => setDiscussion({ ...discussion, message: event.target.value })}
-                      rows={3}
-                      placeholder="Share a question, opportunity, idea, or team request..."
-                      className="w-full mb-3 px-4 py-2 rounded-lg bg-white/70 border border-border focus:outline-none resize-none"
-                    />
+              <div className="flex flex-col h-[650px]">
+                <div className="flex-1 overflow-y-auto pr-2 space-y-4 mb-4 chat-container">
+                  {(feed?.discussions || []).length === 0 ? (
+                    <div className="p-8 rounded-xl bg-white/30 border border-dashed border-border text-sm text-muted-foreground text-center">
+                      <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                      <p>No messages yet in this community workspace.</p>
+                      <p className="text-xs">Be the first to start a discussion below!</p>
+                    </div>
+                  ) : (
+                    feed.discussions.map((item: any) => (
+                      <div key={item.id} className="flex flex-col group">
+                        <div className="flex items-center gap-2 mb-1 px-1">
+                          <span className="font-bold text-[11px] text-[#7F5AF0]">{item.author}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-accent/50 text-muted-foreground uppercase font-medium">{item.type}</span>
+                        </div>
+                        <div className="p-3 rounded-2xl rounded-tl-none bg-white/80 border border-border shadow-sm group-hover:shadow-md transition-all max-w-[85%]">
+                          {item.title && <h4 className="font-bold text-sm mb-1 text-foreground">{item.title}</h4>}
+                          <p className="text-sm text-foreground/90 leading-relaxed">{item.message}</p>
+                          <div className="mt-2 flex items-center gap-3 text-[10px] text-muted-foreground border-t border-border/30 pt-1.5">
+                            <span className="flex items-center gap-1 hover:text-primary cursor-pointer transition-colors">
+                              <MessageSquare className="w-3 h-3" /> {item.replies} replies
+                            </span>
+                            <span className="flex items-center gap-1 hover:text-pink-500 cursor-pointer transition-colors">
+                              <Plus className="w-3 h-3" /> {item.likes} likes
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="mt-auto pt-4 border-t border-border bg-white/20 -mx-6 px-6 pb-2 rounded-b-2xl">
+                  <div className="space-y-3">
                     <div className="flex gap-2">
+                      <input
+                        value={discussion.title}
+                        onChange={(event) => setDiscussion({ ...discussion, title: event.target.value })}
+                        placeholder="Subject (optional)"
+                        className="flex-1 px-4 py-2 rounded-xl bg-white/90 border border-border focus:ring-2 focus:ring-primary/20 focus:outline-none text-sm transition-all"
+                      />
                       <select
                         value={discussion.type}
                         onChange={(event) => setDiscussion({ ...discussion, type: event.target.value })}
-                        className="flex-1 px-3 py-2 rounded-lg bg-white/70 border border-border"
+                        className="px-3 py-2 rounded-xl bg-white/90 border border-border text-xs focus:outline-none"
                       >
                         <option value="discussion">Discussion</option>
                         <option value="team">Team Formation</option>
                         <option value="opportunity">Opportunity</option>
-                        <option value="poll">Poll</option>
                         <option value="announcement">Announcement</option>
                       </select>
-                      <button onClick={createDiscussion} className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white">
-                        Post
+                    </div>
+                    <div className="relative">
+                      <textarea
+                        value={discussion.message}
+                        onChange={(event) => setDiscussion({ ...discussion, message: event.target.value })}
+                        rows={2}
+                        placeholder="Type your message to the community..."
+                        className="w-full pl-4 pr-14 py-3 rounded-2xl bg-white/90 border border-border focus:ring-2 focus:ring-primary/20 focus:outline-none resize-none text-sm shadow-inner transition-all"
+                      />
+                      <button
+                        onClick={createDiscussion}
+                        disabled={!discussion.message.trim()}
+                        className="absolute right-2 bottom-2 p-2.5 bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white rounded-xl shadow-lg hover:shadow-primary/40 disabled:opacity-40 disabled:shadow-none transition-all active:scale-95"
+                        title="Send Message"
+                      >
+                        <Send className="w-5 h-5" />
                       </button>
                     </div>
                   </div>
-
-                  <div className="p-4 rounded-xl bg-white/50 border border-border">
-                    <h3 className="font-heading font-semibold mb-3">Share Resource</h3>
-                    <input
-                      value={resource.title}
-                      onChange={(event) => setResource({ ...resource, title: event.target.value })}
-                      placeholder="React notes, GitHub repo, resume template"
-                      className="w-full mb-3 px-4 py-2 rounded-lg bg-white/70 border border-border focus:outline-none"
-                    />
-                    <input
-                      value={resource.fileUrl}
-                      onChange={(event) => setResource({ ...resource, fileUrl: event.target.value })}
-                      placeholder="https://..."
-                      className="w-full mb-3 px-4 py-2 rounded-lg bg-white/70 border border-border focus:outline-none"
-                    />
-                    <button onClick={uploadResource} className="w-full px-4 py-2 rounded-lg bg-white/70 border border-border hover:bg-white/90 flex items-center justify-center gap-2">
-                      <Upload className="w-4 h-4" />
-                      Upload Resource
-                    </button>
-                  </div>
                 </div>
 
-                <div>
-                  <h3 className="font-heading font-semibold mb-3">Active Discussions</h3>
-                  <div className="space-y-3">
-                    {(feed?.discussions || []).length === 0 ? (
-                      <div className="p-4 rounded-xl bg-white/50 border border-border text-sm text-muted-foreground">No posts yet. Start the first discussion.</div>
-                    ) : feed.discussions.map((item: any) => (
-                      <div key={item.id} className="p-4 rounded-xl bg-white/50 border border-border">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <h3 className="font-heading font-semibold mb-1">{item.title}</h3>
-                            <p className="text-sm text-muted-foreground">{item.message}</p>
-                          </div>
-                          <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs capitalize">{item.type}</span>
-                        </div>
-                        <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
-                          <span>{item.author}</span>
-                          <span>{item.replies} replies</span>
-                          <span>{item.likes} likes</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl bg-white/50 border border-border">
-                    <h3 className="font-heading font-semibold mb-3">Shared Resources</h3>
-                    <div className="space-y-3">
+                <div className="grid md:grid-cols-2 gap-4 mt-8">
+                  <div className="p-4 rounded-xl bg-white/60 border border-border shadow-sm">
+                    <h3 className="font-bold text-xs mb-3 flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
+                      <LinkIcon className="w-3.5 h-3.5" />
+                      Community Resources
+                    </h3>
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                       {(feed?.resources || []).length === 0 ? (
-                        <div className="text-sm text-muted-foreground">No resources shared yet.</div>
-                      ) : feed.resources.map((item: any) => (
-                        <a
-                          key={item.id}
-                          href={item.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block p-3 rounded-lg bg-white/70 border border-border hover:bg-white transition-all"
+                        <div className="text-[11px] text-muted-foreground text-center py-4 border border-dashed border-border rounded-lg bg-white/30">
+                          No resources shared yet.
+                        </div>
+                      ) : (
+                        feed.resources.map((item: any) => (
+                          <a
+                            key={item.id}
+                            href={item.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center justify-between p-2.5 rounded-lg bg-white/80 border border-border hover:border-primary/30 hover:shadow-sm transition-all group"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-xs truncate text-foreground group-hover:text-primary transition-colors">{item.title}</div>
+                              <div className="text-[9px] text-muted-foreground">shared by {item.uploadedBy}</div>
+                            </div>
+                            <Upload className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </a>
+                        ))
+                      )}
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-border/50">
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          value={resource.title}
+                          onChange={(event) => setResource({ ...resource, title: event.target.value })}
+                          placeholder="Resource Name"
+                          className="flex-1 px-3 py-2 rounded-lg bg-white/80 border border-border text-[11px] focus:outline-none"
+                        />
+                        <button 
+                          onClick={uploadResource} 
+                          disabled={!resource.title || !resource.fileUrl}
+                          className="px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white disabled:opacity-30 transition-all text-[11px] font-bold"
                         >
-                          <div className="font-medium text-sm">{item.title}</div>
-                          <div className="text-xs text-muted-foreground">Shared by {item.uploadedBy}</div>
-                        </a>
-                      ))}
+                          Share
+                        </button>
+                      </div>
+                      <input
+                        value={resource.fileUrl}
+                        onChange={(event) => setResource({ ...resource, fileUrl: event.target.value })}
+                        placeholder="Link (https://...)"
+                        className="w-full px-3 py-2 rounded-lg bg-white/80 border border-border text-[11px] focus:outline-none"
+                      />
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-white/50 border border-border">
-                    <h3 className="font-heading font-semibold mb-3">Members</h3>
-                    <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  <div className="p-4 rounded-xl bg-white/60 border border-border shadow-sm">
+                    <h3 className="font-bold text-xs mb-3 flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
+                      <Users className="w-3.5 h-3.5" />
+                      Active Members
+                    </h3>
+                    <div className="space-y-2 max-h-[190px] overflow-y-auto pr-1">
                       {(feed?.members || []).length === 0 ? (
-                        <div className="text-sm text-muted-foreground">No members yet.</div>
-                      ) : feed.members.map((member: any) => (
-                        <div key={member.id || member.name} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/70 border border-border">
-                          <div className="min-w-0">
-                            <div className="font-medium text-sm truncate">{member.name}</div>
-                            <div className="text-xs text-muted-foreground truncate">{member.city || member.role}</div>
+                        <div className="text-[11px] text-muted-foreground text-center py-4">No active members yet.</div>
+                      ) : (
+                        feed.members.map((member: any) => (
+                          <div key={member.id || member.name} className="flex items-center justify-between p-2.5 rounded-lg bg-white/80 border border-border hover:shadow-sm transition-all">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#7F5AF0] to-[#00C2FF] flex-shrink-0 flex items-center justify-center text-[10px] text-white font-bold">
+                                {member.name.charAt(0)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-semibold text-xs truncate text-foreground">{member.name}</div>
+                                <div className="text-[9px] text-muted-foreground truncate italic">{member.role}</div>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 font-bold border border-green-500/20 uppercase tracking-tighter">Online</span>
+                              <span className="text-[9px] text-muted-foreground font-medium">{member.city || 'Global'}</span>
+                            </div>
                           </div>
-                          <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs capitalize">{member.role}</span>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>

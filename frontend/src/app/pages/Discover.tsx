@@ -141,25 +141,6 @@ export function Discover() {
           </button>
         </div>
 
-        {/* Category quick filters */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          {['All', 'Entertainment', 'Career', 'Technology', 'Music', 'Sports'].map((cat) => {
-            const key = cat.toLowerCase();
-            const isActive = (categoryFilter && categoryFilter.toLowerCase() === key) || (!categoryFilter && cat === 'All');
-            return (
-              <button
-                key={cat}
-                onClick={() => {
-                  setCategoryFilter(cat === 'All' ? '' : cat);
-                  setActiveTab('all');
-                }}
-                className={`px-4 py-2 rounded-full whitespace-nowrap transition-all ${isActive ? 'bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white shadow-lg' : 'bg-white/70 backdrop-blur-lg border border-border hover:bg-white/90'}`}>
-                {cat}
-              </button>
-            );
-          })}
-        </div>
-
         <div className="grid md:grid-cols-3 gap-3">
           <input
             value={city}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { Calendar, Users, TrendingUp, Sparkles, Zap, Award } from 'lucide-react';
-import { authGetJson } from '@/lib/api';
+import { Calendar, Users, TrendingUp, Sparkles, Zap, Award, Bookmark, BookmarkCheck } from 'lucide-react';
+import { authGetJson, authPostJson } from '@/lib/api';
 
 type DashboardSummary = {
   user?: {
@@ -33,6 +33,7 @@ type DashboardSummary = {
     title: string;
     match: number;
     reason: string;
+    isSaved?: boolean;
   }>;
   networkActivity: Array<{
     name: string;
@@ -85,25 +86,36 @@ export function Dashboard() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const loadSummary = async () => {
-      setLoading(true);
-      setError('');
-
-      try {
-        const data = await authGetJson<DashboardSummary>('/events/dashboard/summary');
-        setSummary(data || emptySummary);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unable to load your dashboard');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadSummary();
   }, []);
 
+  const loadSummary = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const data = await authGetJson<DashboardSummary>('/events/dashboard/summary');
+      setSummary(data || emptySummary);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load your dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleSave = async (eventId: string) => {
+    try {
+      await authPostJson(`/events/${eventId}/wishlist`, {});
+      // Refresh summary to reflect changes in stats and saved state
+      await loadSummary();
+    } catch (err) {
+      console.error('Failed to toggle save:', err);
+    }
+  };
+
   const { stats, level, upcomingEvents, recommendations, networkActivity } = summary;
   const firstName = summary.user?.name?.split(' ')[0];
+  const totalXp = stats.xpPoints || (stats as any).totalXp || 0;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -130,7 +142,7 @@ export function Dashboard() {
             <TrendingUp className="w-4 h-4 text-[#2CB67D]" />
           </div>
           <div className="text-2xl font-heading font-bold mb-1">
-            {loading ? '...' : formatNumber(stats.eventsAttended)}
+            {loading ? '...' : formatNumber(stats.eventsAttended || 0)}
           </div>
           <div className="text-sm text-muted-foreground">Events Attended</div>
         </div>
@@ -143,7 +155,7 @@ export function Dashboard() {
             <TrendingUp className="w-4 h-4 text-[#2CB67D]" />
           </div>
           <div className="text-2xl font-heading font-bold mb-1">
-            {loading ? '...' : formatNumber(stats.connectionsMade)}
+            {loading ? '...' : formatNumber(stats.connectionsMade || 0)}
           </div>
           <div className="text-sm text-muted-foreground">Connections Made</div>
         </div>
@@ -155,7 +167,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="text-2xl font-heading font-bold mb-1">
-            {loading ? '...' : formatNumber(stats.xpPoints)}
+            {loading ? '...' : formatNumber(totalXp)}
           </div>
           <div className="text-sm text-muted-foreground">XP Points</div>
         </div>
@@ -167,7 +179,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="text-2xl font-heading font-bold mb-1">
-            {loading ? '...' : formatNumber(stats.dayStreak)}
+            {loading ? '...' : formatNumber(stats.dayStreak || 0)}
           </div>
           <div className="text-sm text-muted-foreground">Day Streak</div>
         </div>
@@ -215,8 +227,25 @@ export function Dashboard() {
                       >
                         View Details
                       </Link>
-                      <button className="px-4 py-2 rounded-lg bg-white/50 border border-border text-sm hover:bg-white/80 transition-all">
-                        Save
+                      <button
+                        onClick={() => handleToggleSave(event.id)}
+                        className={`px-4 py-2 rounded-lg border text-sm transition-all flex items-center gap-2 ${
+                          event.isSaved
+                            ? 'bg-primary/10 border-primary text-primary hover:bg-primary/20'
+                            : 'bg-white/50 border-border hover:bg-white/80'
+                        }`}
+                      >
+                        {event.isSaved ? (
+                          <>
+                            <BookmarkCheck className="w-4 h-4" />
+                            Saved
+                          </>
+                        ) : (
+                          <>
+                            <Bookmark className="w-4 h-4" />
+                            Save
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -259,7 +288,7 @@ export function Dashboard() {
                               </div>
                               <div className="flex items-center gap-1">
                                 <Users className="w-4 h-4" />
-                                <span>{formatNumber(event.attendees)}</span>
+                                <span>{formatNumber(event.attendees || 0)}</span>
                               </div>
                             </div>
                           </div>
@@ -293,14 +322,14 @@ export function Dashboard() {
             <h3 className="font-heading font-semibold mb-4">Level Progress</h3>
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">Level {level.current}</span>
-                <span className="text-sm">{formatNumber(level.currentXp)} / {formatNumber(level.nextLevelXp)} XP</span>
+                <span className="text-sm">Level {level.current || 1}</span>
+                <span className="text-sm">{formatNumber(level.currentXp || 0)} / {formatNumber(level.nextLevelXp || 500)} XP</span>
               </div>
               <div className="h-2 rounded-full bg-white/20">
-                <div className="h-full rounded-full bg-white" style={{ width: `${level.progressPercent}%` }}></div>
+                <div className="h-full rounded-full bg-white" style={{ width: `${level.progressPercent || 0}%` }}></div>
               </div>
             </div>
-            <p className="text-sm text-white/80">{formatNumber(level.xpToNextLevel)} XP to next level</p>
+            <p className="text-sm text-white/80">{formatNumber(level.xpToNextLevel || 0)} XP to next level</p>
           </div>
 
           {/* Event Streak */}
@@ -309,7 +338,7 @@ export function Dashboard() {
               <div className="w-8 h-8 rounded-full bg-[#2CB67D]/10 flex items-center justify-center">
                 <Zap className="w-4 h-4 text-[#2CB67D]" />
               </div>
-              <h3 className="font-heading font-semibold">{stats.dayStreak} Day Streak</h3>
+              <h3 className="font-heading font-semibold">{(stats.dayStreak || 0)} Day Streak</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
               Keep it up! Attend an event to maintain your streak.
@@ -319,7 +348,7 @@ export function Dashboard() {
                 <div
                   key={day}
                   className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium ${
-                    day <= Math.min(stats.dayStreak, 7)
+                    day <= Math.min(stats.dayStreak || 0, 7)
                       ? 'bg-gradient-to-br from-[#2CB67D] to-[#00C2FF] text-white'
                       : 'bg-white/50 border border-border text-muted-foreground'
                   }`}

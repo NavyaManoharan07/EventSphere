@@ -426,9 +426,9 @@ const buildLevel = (xp) => {
 
 const calculateRewardSummary = async (user) => {
   const now = new Date();
-  const userId = user._id || user.id;
+  const userId = (user._id || user.id).toString();
 
-  const [tickets, organizedEvents, ticketCounts, joinedCommunities, discussionCount, resourceCommunities] = await Promise.all([
+  const [tickets, organizedEvents, ticketCounts, joinedCommunities, discussionCount, resourceCommunities, explicitConnections] = await Promise.all([
     Ticket.find({ attendee: userId })
       .populate('event', 'title description category eventType venue startDate endDate capacity price organizer networkingEnabled')
       .lean(),
@@ -440,6 +440,10 @@ const calculateRewardSummary = async (user) => {
     Community.find({ 'members.user': userId }).lean(),
     Discussion.countDocuments({ user: userId }),
     Community.find({ 'resources.uploadedBy': userId }).lean(),
+    Connection.find({
+      $or: [{ sender: userId }, { receiver: userId }],
+      status: 'accepted',
+    }).lean(),
   ]);
 
   const soldByEvent = ticketCounts.reduce((acc, item) => {
@@ -449,6 +453,7 @@ const calculateRewardSummary = async (user) => {
 
   const validTickets = tickets.filter((ticket) => ticket.event);
   const attendedTickets = validTickets.filter((ticket) => ticket.status === 'checked-in');
+  const bookedTickets = validTickets.filter((ticket) => ticket.status === 'booked' || ticket.status === 'checked-in');
   const attendedEventIds = attendedTickets.map((ticket) => ticket.event._id);
 
   const sharedAttendees = attendedEventIds.length
@@ -459,7 +464,10 @@ const calculateRewardSummary = async (user) => {
       }).lean()
     : [];
 
-  const connectionIds = new Set(sharedAttendees.map((ticket) => ticket.attendee.toString()));
+  const connectionIds = new Set([
+    ...sharedAttendees.map((ticket) => ticket.attendee.toString()),
+    ...explicitConnections.map((c) => (c.sender.toString() === userId.toString() ? c.receiver.toString() : c.sender.toString())),
+  ]);
   const attendedWithFriendCount = new Set(sharedAttendees.map((ticket) => ticket.event.toString())).size;
   const dayStreak = getConsecutiveDayStreak(attendedTickets.map((ticket) => ticket.checkedInAt));
   const weekendEvents = attendedTickets.filter((ticket) => isWeekend(ticket.event.startDate)).length;
@@ -495,6 +503,7 @@ const calculateRewardSummary = async (user) => {
     { key: 'event100', label: 'Event Reaches 100 Attendees', count: organizedEvents.filter((event) => (soldByEvent[event._id.toString()]?.sold || 0) >= 100).length, xpEach: 200 },
     { key: 'organizerNetworking', label: 'Enable Networking', count: organizedEvents.filter((event) => event.networkingEnabled).length, xpEach: 50 },
     { key: 'educationalEvent', label: 'Create Educational Event', count: organizedEvents.filter(isEducationalEvent).length, xpEach: 100 },
+    { key: 'saveEvent', label: 'Save Event for Later', count: Math.min((user.behavior?.savedEvents || []).length, 5), xpEach: 10 },
   ];
 
   const xpBreakdown = xpRules
@@ -597,7 +606,7 @@ const calculateRewardSummary = async (user) => {
 
 exports.getRewardsSummary = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id).lean();
+    const user = await User.findById(req.user._id || req.user.id).lean();
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -723,7 +732,11 @@ exports.getNetworkingSuggestions = async (req, res, next) => {
 exports.getDashboardSummary = async (req, res, next) => {
   try {
     const now = new Date();
-    const userId = req.user.id;
+    const user = await User.findById(req.user._id || req.user.id).lean();
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const rewards = await calculateRewardSummary(user);
+    const userId = user._id;
 
     const myTickets = await Ticket.find({ attendee: userId })
       .populate('event', 'title description category venue startDate endDate capacity price organizer networkingEnabled')
@@ -733,6 +746,8 @@ exports.getDashboardSummary = async (req, res, next) => {
     const validTickets = myTickets.filter((ticket) => ticket.event);
     const bookedEventIds = validTickets.map((ticket) => ticket.event._id);
     const bookedEventIdStrings = new Set(bookedEventIds.map((id) => id.toString()));
+
+    const savedEventIdStrings = new Set((user.behavior?.savedEvents || []).map((id) => id.toString()));
 
     const attendedTickets = validTickets.filter((ticket) => ticket.status === 'checked-in');
     const attendedCategories = attendedTickets.map((ticket) => getEventCategory(ticket.event));
@@ -778,29 +793,16 @@ exports.getDashboardSummary = async (req, res, next) => {
       return acc;
     }, {});
 
-    const xpPoints = attendedTickets.length * 100 + validTickets.length * 50 + uniqueConnections.size * 25;
-    const level = Math.floor(xpPoints / 500) + 1;
-    const nextLevelXp = level * 500;
-    const dayStreak = getConsecutiveDayStreak(attendedTickets.map((ticket) => ticket.checkedInAt));
-
     return res.status(200).json({
       user: {
-        name: req.user.name,
-        email: req.user.email,
+        name: user.name,
+        email: user.email,
       },
       stats: {
-        eventsAttended: attendedTickets.length,
-        connectionsMade: uniqueConnections.size,
-        xpPoints,
-        dayStreak,
+        ...rewards.stats,
+        xpPoints: rewards.stats.totalXp,
       },
-      level: {
-        current: level,
-        currentXp: xpPoints,
-        nextLevelXp,
-        progressPercent: nextLevelXp ? Math.min(Math.round((xpPoints / nextLevelXp) * 100), 100) : 0,
-        xpToNextLevel: Math.max(nextLevelXp - xpPoints, 0),
-      },
+      level: rewards.level,
       upcomingEvents: upcomingTickets.map((ticket) => ({
         id: ticket.event._id,
         title: ticket.event.title,
@@ -810,21 +812,22 @@ exports.getDashboardSummary = async (req, res, next) => {
       })),
       recommendations: candidateEvents
         .map((event) => {
-        const sold = soldByEvent[event._id.toString()] || 0;
-        const score = scoreEventForUser({
-          event,
-          user: req.user,
-          sold,
-          attendedCategories,
-        });
+          const sold = soldByEvent[event._id.toString()] || 0;
+          const score = scoreEventForUser({
+            event,
+            user,
+            sold,
+            attendedCategories,
+          });
 
-        return {
-          id: event._id,
-          title: event.title,
-          match: score.match,
-          reason: score.reason,
-        };
-      })
+          return {
+            id: event._id,
+            title: event.title,
+            match: score.match,
+            reason: score.reason,
+            isSaved: savedEventIdStrings.has(event._id.toString()),
+          };
+        })
         .sort((a, b) => b.match - a.match)
         .slice(0, 3),
       networkActivity: Array.from(uniqueConnections.values()).slice(0, 3).map((ticket) => ({

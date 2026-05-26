@@ -5,6 +5,7 @@ const Ticket = require('../models/Ticket');
 const User = require('../models/User');
 const TeamInvitation = require('../models/TeamInvitation');
 const Notification = require('../models/Notification');
+const { addXp } = require('../utils/xpHelper');
 
 const cleanText = (value, fallback = '') => String(value || fallback).trim();
 
@@ -195,6 +196,7 @@ exports.joinCommunity = async (req, res, next) => {
     if (!isMember(community, req.user.id)) {
       community.members.push({ user: req.user.id, role: 'member', xpContribution: 20 });
       await community.save();
+      await addXp(req.user.id, 'joinCommunity');
     }
 
     return res.status(200).json(serializeCommunity(community.toObject(), {}, req.user.id));
@@ -206,7 +208,7 @@ exports.joinCommunity = async (req, res, next) => {
 exports.getCommunityFeed = async (req, res, next) => {
   try {
     const community = await Community.findById(req.params.communityId)
-      .populate('members.user', 'name city interests goals')
+      .populate('members.user', 'name city interests goals xp')
       .populate('resources.uploadedBy', 'name')
       .lean();
 
@@ -248,12 +250,12 @@ exports.getCommunityFeed = async (req, res, next) => {
         createdAt: resource.createdAt,
       })),
       leaderboard: [...community.members]
-        .sort((a, b) => b.xpContribution - a.xpContribution)
+        .sort((a, b) => (b.user?.xp || 0) - (a.user?.xp || 0))
         .slice(0, 5)
         .map((member, index) => ({
           rank: index + 1,
           name: member.user?.name || 'Member',
-          xpContribution: member.xpContribution,
+          xpContribution: member.user?.xp || 0,
         })),
     });
   } catch (error) {
@@ -291,6 +293,7 @@ exports.createDiscussion = async (req, res, next) => {
     const member = community.members.find((item) => item.user.toString() === req.user.id);
     if (member) member.xpContribution += 15;
     await community.save();
+    await addXp(req.user.id, 'discussionPost');
 
     return res.status(201).json(discussion);
   } catch (error) {
@@ -321,6 +324,7 @@ exports.uploadResource = async (req, res, next) => {
     const member = community.members.find((item) => item.user.toString() === req.user.id);
     if (member) member.xpContribution += 25;
     await community.save();
+    await addXp(req.user.id, 'uploadResource');
 
     return res.status(201).json({ message: 'Resource uploaded' });
   } catch (error) {
