@@ -12,6 +12,7 @@ type DashboardSummary = {
     eventsAttended: number;
     connectionsMade: number;
     xpPoints: number;
+    totalXp?: number;
     dayStreak: number;
   };
   level: {
@@ -80,6 +81,10 @@ const formatTime = (date?: string) => {
 
 const formatNumber = (value: number) => value.toLocaleString();
 
+const getSettledValue = <T,>(result: PromiseSettledResult<T>, fallback: T): T => (
+  result.status === 'fulfilled' ? result.value : fallback
+);
+
 export function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary>(emptySummary);
   const [loading, setLoading] = useState(false);
@@ -94,8 +99,70 @@ export function Dashboard() {
     setError('');
 
     try {
-      const data = await authGetJson<DashboardSummary>('/events/dashboard/summary');
-      setSummary(data || emptySummary);
+      const [dashboardResult, rewardsResult, ticketsResult, conversationsResult] = await Promise.allSettled([
+        authGetJson<DashboardSummary>('/events/dashboard/summary'),
+        authGetJson<any>('/events/rewards/summary'),
+        authGetJson<any[]>('/events/my/tickets'),
+        authGetJson<any[]>('/messages/conversations'),
+      ]);
+
+      const dashboardData = getSettledValue(dashboardResult, emptySummary);
+      const rewardsData = getSettledValue(rewardsResult, null);
+      const tickets = getSettledValue(ticketsResult, []);
+      const conversations = getSettledValue(conversationsResult, []);
+
+      const distinctTicketEvents = new Set(
+        tickets
+          .map((ticket) => ticket.event?._id || ticket.event)
+          .filter(Boolean)
+          .map(String)
+      );
+
+      const rewardsStats = rewardsData?.stats || {};
+      const rewardsLevel = rewardsData?.level;
+      const xpPoints = Math.max(
+        Number(dashboardData?.stats?.xpPoints || dashboardData?.stats?.totalXp || 0),
+        Number(rewardsStats.totalXp || 0)
+      );
+      const connectionsMade = Math.max(
+        Number(dashboardData?.stats?.connectionsMade || 0),
+        Number(rewardsStats.connectionsMade || 0),
+        conversations.length
+      );
+      const eventsAttended = Math.max(
+        Number(dashboardData?.stats?.eventsAttended || 0),
+        Number(rewardsStats.eventsAttended || 0),
+        distinctTicketEvents.size
+      );
+      const dayStreak = Math.max(
+        Number(dashboardData?.stats?.dayStreak || 0),
+        Number(rewardsStats.dayStreak || 0),
+        xpPoints > 0 ? 1 : 0
+      );
+
+      const nextLevelXp = Number(rewardsLevel?.nextLevelXp || dashboardData?.level?.nextLevelXp || 500);
+      const currentLevelXp = Number(rewardsLevel?.currentLevelXp || 0);
+      const levelSpan = Math.max(nextLevelXp - currentLevelXp, 1);
+
+      setSummary({
+        ...(dashboardData || emptySummary),
+        stats: {
+          ...(dashboardData?.stats || emptySummary.stats),
+          eventsAttended,
+          connectionsMade,
+          xpPoints,
+          totalXp: xpPoints,
+          dayStreak,
+        },
+        level: {
+          ...(dashboardData?.level || emptySummary.level),
+          current: Number(rewardsLevel?.current || dashboardData?.level?.current || 1),
+          currentXp: xpPoints,
+          nextLevelXp,
+          progressPercent: rewardsLevel?.progressPercent ?? Math.min(Math.round(((xpPoints - currentLevelXp) / levelSpan) * 100), 100),
+          xpToNextLevel: rewardsLevel?.xpToNextLevel ?? Math.max(nextLevelXp - xpPoints, 0),
+        },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load your dashboard');
     } finally {
@@ -115,7 +182,7 @@ export function Dashboard() {
 
   const { stats, level, upcomingEvents, recommendations, networkActivity } = summary;
   const firstName = summary.user?.name?.split(' ')[0];
-  const totalXp = stats.xpPoints || (stats as any).totalXp || 0;
+  const totalXp = stats.xpPoints ?? stats.totalXp ?? 0;
 
   return (
     <div className="max-w-7xl mx-auto">

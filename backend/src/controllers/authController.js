@@ -143,6 +143,11 @@ exports.loginUser = async (req, res, next) => {
         return res.status(401).json({ message: 'Invalid email or password (offline)' });
       }
 
+      const todayKey = new Date().toISOString().slice(0, 10);
+      local.behavior = local.behavior || {};
+      local.behavior.activityDates = Array.from(new Set([...(local.behavior.activityDates || []), todayKey]));
+      storeLocalUser(local);
+
       return res.status(200).json({
         ...userPayload(local),
         token: generateToken(local._id),
@@ -159,6 +164,13 @@ exports.loginUser = async (req, res, next) => {
     if (!isPasswordMatch) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
+
+    const todayKey = new Date().toISOString().slice(0, 10);
+    await User.findByIdAndUpdate(user._id, {
+      $addToSet: { 'behavior.activityDates': todayKey },
+    });
+    user.behavior = user.behavior || {};
+    user.behavior.activityDates = Array.from(new Set([...(user.behavior.activityDates || []), todayKey]));
 
     return res.status(200).json({
       ...userPayload(user),

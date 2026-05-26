@@ -273,6 +273,20 @@ const getConsecutiveDayStreak = (dates) => {
   return streak;
 };
 
+const getConsecutiveKeyStreak = (dayKeys = []) => {
+  const keys = new Set(dayKeys.filter(Boolean));
+  let streak = 0;
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+
+  while (keys.has(cursor.toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return streak;
+};
+
 const LEVELS = [
   { level: 1, xp: 0, benefit: 'Member access' },
   { level: 2, xp: 200, benefit: 'Profile customization' },
@@ -732,7 +746,14 @@ exports.getNetworkingSuggestions = async (req, res, next) => {
 exports.getDashboardSummary = async (req, res, next) => {
   try {
     const now = new Date();
-    const user = await User.findById(req.user._id || req.user.id).lean();
+    const todayKey = now.toISOString().slice(0, 10);
+    const currentUserId = req.user._id || req.user.id;
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $addToSet: { 'behavior.activityDates': todayKey },
+    });
+
+    const user = await User.findById(currentUserId).lean();
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const rewards = await calculateRewardSummary(user);
@@ -750,6 +771,7 @@ exports.getDashboardSummary = async (req, res, next) => {
     const savedEventIdStrings = new Set((user.behavior?.savedEvents || []).map((id) => id.toString()));
 
     const attendedTickets = validTickets.filter((ticket) => ticket.status === 'checked-in');
+    const joinedEventIds = new Set(validTickets.map((ticket) => ticket.event._id.toString()));
     const attendedCategories = attendedTickets.map((ticket) => getEventCategory(ticket.event));
     const upcomingTickets = validTickets
       .filter((ticket) => ticket.event.startDate && new Date(ticket.event.startDate) >= now)
@@ -775,6 +797,36 @@ exports.getDashboardSummary = async (req, res, next) => {
       }
     });
 
+    await Connection.updateMany({
+      status: 'pending',
+      $or: [{ sender: userId }, { receiver: userId }],
+    }, {
+      $set: { status: 'accepted', following: true },
+    });
+
+    const explicitConnections = await Connection.find({
+      status: { $ne: 'declined' },
+      $or: [{ sender: userId }, { receiver: userId }],
+    })
+      .populate('sender', 'name email')
+      .populate('receiver', 'name email')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    explicitConnections.forEach((connection) => {
+      const other = connection.sender?._id?.toString() === userId.toString()
+        ? connection.receiver
+        : connection.sender;
+
+      if (other?._id && !uniqueConnections.has(other._id.toString())) {
+        uniqueConnections.set(other._id.toString(), {
+          attendee: other,
+          event: { title: 'EventSphere networking' },
+          createdAt: connection.createdAt,
+        });
+      }
+    });
+
     const candidateEvents = await Event.find({
       _id: { $nin: Array.from(bookedEventIdStrings) },
       startDate: { $gte: now },
@@ -793,6 +845,36 @@ exports.getDashboardSummary = async (req, res, next) => {
       return acc;
     }, {});
 
+    const activityDayKeys = new Set([
+      todayKey,
+      ...(user.behavior?.activityDates || []),
+      ...((user.behavior?.savedEvents || []).length ? [todayKey] : []),
+      ...validTickets.flatMap((ticket) => [
+        ticket.bookedAt ? new Date(ticket.bookedAt).toISOString().slice(0, 10) : '',
+        ticket.checkedInAt ? new Date(ticket.checkedInAt).toISOString().slice(0, 10) : '',
+      ]),
+      ...explicitConnections.map((connection) => (
+        connection.createdAt ? new Date(connection.createdAt).toISOString().slice(0, 10) : ''
+      )),
+    ].filter(Boolean));
+
+    const eventsAttended = joinedEventIds.size;
+    const storedConnectionsMade = Number(user.behavior?.connectionsMade || 0);
+    const connectionsMade = Math.max(uniqueConnections.size, storedConnectionsMade);
+    const savedEventsCount = savedEventIdStrings.size;
+    const checkedInCount = attendedTickets.length;
+    const xpPoints = Math.max(
+      rewards.stats.totalXp || 0,
+      20
+        + eventsAttended * 50
+        + checkedInCount * 50
+        + connectionsMade * 25
+        + savedEventsCount * 10
+        + rewards.stats.eventsOrganized * 100
+    );
+    const level = buildLevel(xpPoints);
+    const dayStreak = getConsecutiveKeyStreak(Array.from(activityDayKeys));
+
     return res.status(200).json({
       user: {
         name: user.name,
@@ -800,9 +882,13 @@ exports.getDashboardSummary = async (req, res, next) => {
       },
       stats: {
         ...rewards.stats,
-        xpPoints: rewards.stats.totalXp,
+        eventsAttended,
+        connectionsMade,
+        xpPoints,
+        totalXp: xpPoints,
+        dayStreak,
       },
-      level: rewards.level,
+      level,
       upcomingEvents: upcomingTickets.map((ticket) => ({
         id: ticket.event._id,
         title: ticket.event.title,
