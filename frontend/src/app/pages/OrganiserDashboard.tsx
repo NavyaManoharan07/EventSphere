@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Plus, TrendingUp, Users, DollarSign, Calendar, Download } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { getJson } from '@/lib/api';
+import { authGetJson, getJson } from '@/lib/api';
 
 export function OrganiserDashboard() {
   const [events, setEvents] = useState<any[]>([]);
+  const [intelligence, setIntelligence] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -16,6 +17,12 @@ export function OrganiserDashboard() {
       try {
         const data = await getJson<any[]>('/events');
         setEvents(data || []);
+        try {
+          const insights = await authGetJson('/events/organizer/intelligence');
+          setIntelligence(insights);
+        } catch {
+          setIntelligence(null);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to load events');
       } finally {
@@ -32,6 +39,27 @@ export function OrganiserDashboard() {
 
   const salesData = events.slice(-5).map((event, index) => ({ month: event.title || `Event ${index + 1}`, sales: Number(event.sold || 0) }));
   const revenueData = events.slice(-5).map((event, index) => ({ month: event.title || `Event ${index + 1}`, revenue: Number(event.price || 0) * Number(event.sold || 0) }));
+
+  const exportCsv = () => {
+    const rows = [
+      ['Title', 'Date', 'Tickets Sold', 'Capacity', 'Revenue'],
+      ...events.map((event) => [
+        event.title,
+        event.startDate ? new Date(event.startDate).toLocaleDateString() : 'TBD',
+        event.sold || 0,
+        event.capacity || 0,
+        Number(event.price || 0) * Number(event.sold || 0),
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'eventsphere-attendees.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -140,10 +168,50 @@ export function OrganiserDashboard() {
             </div>
           </div>
 
+          {intelligence && (
+            <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border mb-8">
+              <h2 className="text-xl font-heading font-semibold mb-4">AI Organizer Intelligence</h2>
+              <div className="grid md:grid-cols-4 gap-4 mb-5">
+                <div className="p-4 rounded-xl bg-white/50 border border-border">
+                  <div className="text-sm text-muted-foreground">Event Health</div>
+                  <div className="text-2xl font-heading font-bold">{intelligence.summary?.healthScore ?? 0}%</div>
+                </div>
+                <div className="p-4 rounded-xl bg-white/50 border border-border">
+                  <div className="text-sm text-muted-foreground">Check-ins</div>
+                  <div className="text-2xl font-heading font-bold">{intelligence.summary?.checkedIn ?? 0}</div>
+                </div>
+                <div className="p-4 rounded-xl bg-white/50 border border-border">
+                  <div className="text-sm text-muted-foreground">Tickets</div>
+                  <div className="text-2xl font-heading font-bold">{intelligence.summary?.sold ?? 0}</div>
+                </div>
+                <div className="p-4 rounded-xl bg-white/50 border border-border">
+                  <div className="text-sm text-muted-foreground">Revenue</div>
+                  <div className="text-2xl font-heading font-bold">${Number(intelligence.summary?.revenue || 0).toLocaleString()}</div>
+                </div>
+              </div>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl bg-white/50 border border-border">
+                  <h3 className="font-heading font-semibold mb-2">Audience Interests</h3>
+                  {(intelligence.audienceInterests || []).length ? intelligence.audienceInterests.map((item: any) => (
+                    <div key={item.name} className="text-sm text-muted-foreground">{item.name}: {item.count}</div>
+                  )) : <div className="text-sm text-muted-foreground">No attendee interest data yet.</div>}
+                </div>
+                <div className="p-4 rounded-xl bg-white/50 border border-border">
+                  <h3 className="font-heading font-semibold mb-2">Best Timing</h3>
+                  {(intelligence.bestTimingSuggestions || []).map((item: string) => <div key={item} className="text-sm text-muted-foreground mb-1">{item}</div>)}
+                </div>
+                <div className="p-4 rounded-xl bg-white/50 border border-border">
+                  <h3 className="font-heading font-semibold mb-2">Improvements</h3>
+                  {(intelligence.improvementSuggestions || []).map((item: string) => <div key={item} className="text-sm text-muted-foreground mb-1">{item}</div>)}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-heading font-semibold">Active Events</h2>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/50 border border-border hover:bg-white/80 transition-all">
+              <button onClick={exportCsv} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/50 border border-border hover:bg-white/80 transition-all">
                 <Download className="w-4 h-4" />
                 Export CSV
               </button>

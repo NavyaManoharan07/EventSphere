@@ -5,6 +5,8 @@ const Ticket = require('../models/Ticket');
 const User = require('../models/User');
 const Community = require('../models/Community');
 const Discussion = require('../models/Discussion');
+const Connection = require('../models/Connection');
+const Notification = require('../models/Notification');
 
 const buildQrPayload = ({ ticketCode, eventId, attendeeId }) => {
   const payload = {
@@ -31,6 +33,14 @@ exports.createEvent = async (req, res, next) => {
       networkingEnabled,
       communityEnabled,
       aiRecommendationsEnabled,
+      bannerImage,
+      tags,
+      ticketTiers,
+      discountCodes,
+      agenda,
+      speakers,
+      faqs,
+      mapUrl,
     } = req.body;
 
     if (!title || !description || !venue || !startDate || !endDate || capacity == null || price == null) {
@@ -55,6 +65,16 @@ exports.createEvent = async (req, res, next) => {
       networkingEnabled: Boolean(networkingEnabled),
       communityEnabled: Boolean(communityEnabled),
       aiRecommendationsEnabled: Boolean(aiRecommendationsEnabled),
+      bannerImage: bannerImage || '',
+      tags: Array.isArray(tags) ? tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 20) : [],
+      ticketTiers: Array.isArray(ticketTiers) && ticketTiers.length
+        ? ticketTiers
+        : [{ name: price > 0 ? 'General Admission' : 'Free Ticket', price: Number(price), capacity: Number(capacity), description: 'Standard access' }],
+      discountCodes: Array.isArray(discountCodes) ? discountCodes : [],
+      agenda: Array.isArray(agenda) ? agenda : [],
+      speakers: Array.isArray(speakers) ? speakers : [],
+      faqs: Array.isArray(faqs) ? faqs : [],
+      mapUrl: mapUrl || '',
     });
 
     await Community.create({
@@ -75,7 +95,34 @@ exports.createEvent = async (req, res, next) => {
 
 exports.getEvents = async (req, res, next) => {
   try {
-    const events = await Event.find()
+    const query = {};
+    const now = new Date();
+
+    if (req.query.category) query.category = new RegExp(String(req.query.category), 'i');
+    if (req.query.city) query.venue = new RegExp(String(req.query.city), 'i');
+    if (req.query.eventType) query.eventType = new RegExp(String(req.query.eventType), 'i');
+    if (req.query.networking === 'true') query.networkingEnabled = true;
+    if (req.query.free === 'true') query.price = 0;
+    if (req.query.paid === 'true') query.price = { $gt: 0 };
+    if (req.query.dateFrom || req.query.dateTo) {
+      query.startDate = {};
+      if (req.query.dateFrom) query.startDate.$gte = new Date(req.query.dateFrom);
+      if (req.query.dateTo) query.startDate.$lte = new Date(req.query.dateTo);
+    }
+    if (req.query.weekend === 'true') query.startDate = { ...(query.startDate || {}), $gte: now };
+
+    const search = String(req.query.search || '').trim();
+    if (search) {
+      query.$or = [
+        { title: new RegExp(search, 'i') },
+        { description: new RegExp(search, 'i') },
+        { category: new RegExp(search, 'i') },
+        { venue: new RegExp(search, 'i') },
+        { tags: new RegExp(search, 'i') },
+      ];
+    }
+
+    const events = await Event.find(query)
       .populate('organizer', 'name email')
       .lean();
 
@@ -89,12 +136,15 @@ exports.getEvents = async (req, res, next) => {
       return acc;
     }, {});
 
-    const payload = events.map((event) => {
+    const payload = events
+      .filter((event) => req.query.weekend === 'true' ? isWeekend(event.startDate) : true)
+      .map((event) => {
       const sold = soldByEvent[event._id.toString()] || 0;
       return {
         ...event,
         sold,
         seatsRemaining: Math.max(event.capacity - sold, 0),
+        trendingScore: sold + Math.max(0, Math.round((new Date(event.startDate) - now) / 86400000) * -1),
       };
     });
 
@@ -145,27 +195,47 @@ exports.bookTicket = async (req, res, next) => {
       return res.status(400).json({ message: 'Event is sold out' });
     }
 
-    const ticketCode = crypto.randomUUID();
-    const qrPayload = buildQrPayload({
-      ticketCode,
-      eventId: event._id.toString(),
-      attendeeId: req.user.id,
-    });
+    const quantity = Math.min(Math.max(Number(req.body.quantity) || 1, 1), 10);
+    const ticketType = String(req.body.ticketType || 'General').trim();
+    const tickets = [];
 
-    const ticket = await Ticket.create({
-      event: event._id,
-      attendee: req.user.id,
-      ticketCode,
-      qrPayload,
+    for (let index = 0; index < quantity; index += 1) {
+      const ticketCode = crypto.randomUUID();
+      const qrPayload = buildQrPayload({
+        ticketCode,
+        eventId: event._id.toString(),
+        attendeeId: req.user.id,
+      });
+
+      tickets.push(await Ticket.create({
+        event: event._id,
+        attendee: req.user.id,
+        ticketCode,
+        qrPayload,
+        ticketType,
+        quantity: 1,
+        amountPaid: Number(event.price) || 0,
+      }));
+    }
+
+    await Notification.create({
+      user: req.user.id,
+      type: 'ticket',
+      title: 'Ticket confirmed',
+      message: `Your ticket for ${event.title} is confirmed.`,
+      link: '/app/tickets',
     });
 
     res.status(201).json({
-      ticketId: ticket._id,
-      event: event._id,
-      ticketCode,
-      qrPayload,
-      status: ticket.status,
-      bookedAt: ticket.bookedAt,
+      tickets: tickets.map((ticket) => ({
+        ticketId: ticket._id,
+        event: event._id,
+        ticketCode: ticket.ticketCode,
+        qrPayload: ticket.qrPayload,
+        ticketType: ticket.ticketType,
+        status: ticket.status,
+        bookedAt: ticket.bookedAt,
+      })),
     });
   } catch (error) {
     next(error);
@@ -599,8 +669,26 @@ exports.getNetworkingSuggestions = async (req, res, next) => {
       .limit(30)
       .lean();
 
+    const candidateIds = candidates.map((candidate) => candidate._id);
+    const connections = await Connection.find({
+      status: 'accepted',
+      $or: [
+        { sender: currentUser._id, receiver: { $in: candidateIds } },
+        { receiver: currentUser._id, sender: { $in: candidateIds } },
+      ],
+    }).lean();
+
+    const connectionByUser = connections.reduce((acc, connection) => {
+      const otherId = connection.sender.toString() === currentUser._id.toString()
+        ? connection.receiver.toString()
+        : connection.sender.toString();
+      acc[otherId] = connection;
+      return acc;
+    }, {});
+
     const suggestions = candidates
       .map((candidate) => {
+        const existingConnection = connectionByUser[candidate._id.toString()];
         const score = scoreUserMatch({
           currentUser,
           candidate,
@@ -618,6 +706,8 @@ exports.getNetworkingSuggestions = async (req, res, next) => {
           reason: score.reason,
           sharedInterests: score.sharedInterests,
           sharedEvents: sharedEventsByUser[candidate._id.toString()] || 0,
+          connected: existingConnection?.status === 'accepted' || false,
+          following: existingConnection?.following || false,
         };
       })
       .filter((candidate) => candidate.match >= 35)
@@ -778,6 +868,8 @@ exports.checkInTicket = async (req, res, next) => {
     await ticket.save();
 
     res.status(200).json({
+      success: true,
+      message: 'Ticket verified successfully.',
       ticketId: ticket._id,
       status: ticket.status,
       checkedInAt: ticket.checkedInAt,
@@ -876,6 +968,16 @@ exports.verifyRazorpayPayment = async (req, res, next) => {
       attendee: req.user.id,
       ticketCode,
       qrPayload,
+      ticketType: req.body.ticketType || 'General',
+      amountPaid: Number(event.price) || 0,
+    });
+
+    await Notification.create({
+      user: req.user.id,
+      type: 'ticket',
+      title: 'Payment successful',
+      message: `Your ticket for ${event.title} is ready.`,
+      link: '/app/tickets',
     });
 
     res.status(201).json({
@@ -886,6 +988,145 @@ exports.verifyRazorpayPayment = async (req, res, next) => {
       qrPayload,
       status: ticket.status,
       bookedAt: ticket.bookedAt,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.toggleWishlist = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    const eventId = req.params.eventId;
+
+    if (!user || !eventId) {
+      return res.status(404).json({ message: 'User or event not found' });
+    }
+
+    const saved = user.behavior?.savedEvents || [];
+    const exists = saved.some((id) => id.toString() === eventId);
+
+    if (exists) {
+      user.behavior.savedEvents = saved.filter((id) => id.toString() !== eventId);
+    } else {
+      user.behavior.savedEvents = [...saved, eventId];
+      await Notification.create({
+        user: req.user.id,
+        type: 'event',
+        title: 'Event saved',
+        message: 'We will remind you about this event.',
+        link: `/app/event/${eventId}`,
+      });
+    }
+
+    await user.save();
+    return res.status(200).json({ saved: !exists, savedEvents: user.behavior.savedEvents });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getWishlist = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .populate('behavior.savedEvents')
+      .lean();
+
+    return res.status(200).json(user?.behavior?.savedEvents || []);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.addReview = async (req, res, next) => {
+  try {
+    const event = await Event.findById(req.params.eventId);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    const rating = Number(req.body.rating);
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+
+    event.reviews = (event.reviews || []).filter((review) => review.user.toString() !== req.user.id);
+    event.reviews.push({
+      user: req.user.id,
+      rating,
+      comment: String(req.body.comment || '').trim(),
+    });
+    await event.save();
+
+    return res.status(201).json(event.reviews[event.reviews.length - 1]);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.generateDescription = async (req, res) => {
+  const bullets = Array.isArray(req.body.bullets)
+    ? req.body.bullets.map((item) => String(item).trim()).filter(Boolean)
+    : String(req.body.bullets || '').split('\n').map((item) => item.trim()).filter(Boolean);
+
+  const title = String(req.body.title || 'EventSphere event').trim();
+  const highlights = bullets.slice(0, 5);
+
+  return res.status(200).json({
+    description: `${title} brings together attendees for a focused, high-value experience. ${highlights.join(' ')} Expect practical takeaways, meaningful networking, and a polished event flow designed for both learning and connection.`,
+    highlights,
+    marketingCopy: `Join ${title} for curated sessions, smart networking, and moments worth sharing.`,
+  });
+};
+
+exports.buildSmartSchedule = async (req, res) => {
+  const sessions = Array.isArray(req.body.sessions) ? req.body.sessions : [];
+  const ordered = sessions
+    .map((session, index) => ({ ...session, order: index + 1 }))
+    .sort((a, b) => {
+      const score = (value) => /keynote|opening/i.test(value.title || '') ? 0 : /break|lunch/i.test(value.title || '') ? 2 : 1;
+      return score(a) - score(b);
+    })
+    .map((session, index) => ({
+      ...session,
+      suggestedTime: `${String(10 + index).padStart(2, '0')}:00`,
+      reason: /break|lunch/i.test(session.title || '') ? 'Placed after focused sessions for audience flow' : 'Optimized for attention and continuity',
+    }));
+
+  return res.status(200).json({
+    schedule: ordered,
+    suggestions: [
+      'Start with a high-energy session.',
+      'Place breaks after dense learning blocks.',
+      'End with networking or Q&A for retention.',
+    ],
+  });
+};
+
+exports.getOrganizerIntelligence = async (req, res, next) => {
+  try {
+    const events = await Event.find({ organizer: req.user.id }).lean();
+    const eventIds = events.map((event) => event._id);
+    const tickets = await Ticket.find({ event: { $in: eventIds } })
+      .populate('attendee', 'city interests goals')
+      .lean();
+
+    const checkedIn = tickets.filter((ticket) => ticket.status === 'checked-in').length;
+    const sold = tickets.length;
+    const revenue = tickets.reduce((total, ticket) => total + Number(ticket.amountPaid || 0), 0);
+    const interests = {};
+    tickets.forEach((ticket) => (ticket.attendee?.interests || []).forEach((interest) => {
+      interests[interest] = (interests[interest] || 0) + 1;
+    }));
+
+    const healthScore = Math.min(100, Math.round((sold * 8) + (checkedIn * 12) + (events.length * 5)));
+
+    return res.status(200).json({
+      summary: { events: events.length, sold, checkedIn, revenue, healthScore },
+      audienceInterests: Object.entries(interests).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => ({ name, count })),
+      bestTimingSuggestions: ['Weekend evenings for entertainment events', 'Weekday late afternoons for career events'],
+      improvementSuggestions: [
+        sold < events.reduce((sum, event) => sum + Number(event.capacity || 0), 0) * 0.4 ? 'Add early bird pricing or community promotion.' : 'Maintain current promotion cadence.',
+        checkedIn < sold * 0.5 ? 'Send reminder notifications before event day.' : 'Check-in flow is healthy.',
+      ],
     });
   } catch (error) {
     next(error);

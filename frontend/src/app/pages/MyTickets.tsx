@@ -104,8 +104,16 @@ export function MyTickets() {
 
                 <div className="relative mb-6 p-6 rounded-2xl bg-white/90 backdrop-blur">
                   <div className="absolute inset-0 bg-gradient-to-br from-[#7F5AF0]/10 to-[#00C2FF]/10 rounded-2xl"></div>
-                  <div className="relative w-48 h-48 mx-auto bg-white rounded-xl flex items-center justify-center border-4 border-dashed border-border">
-                    <QrCode className="w-32 h-32 text-muted-foreground" />
+                  <div className="relative w-48 h-48 mx-auto bg-white rounded-xl flex items-center justify-center border-4 border-dashed border-border overflow-hidden">
+                    {ticket.qrPayload ? (
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(ticket.qrPayload)}&size=240x240`}
+                        alt="Ticket QR"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <QrCode className="w-32 h-32 text-muted-foreground" />
+                    )}
                   </div>
                   <p className="text-center mt-3 text-xs text-muted-foreground font-mono break-all">
                     {ticket.ticketCode || 'TICKET-NOT-AVAILABLE'}
@@ -113,10 +121,15 @@ export function MyTickets() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
-                  <button className="px-4 py-3 rounded-xl bg-white/50 border border-border hover:bg-white/80 transition-all flex items-center justify-center gap-2">
+                  <a
+                    href={ticket.qrPayload ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(ticket.qrPayload)}&size=600x600` : undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-3 rounded-xl bg-white/50 border border-border hover:bg-white/80 transition-all flex items-center justify-center gap-2"
+                  >
                     <Download className="w-4 h-4" />
                     <span className="text-sm">Download</span>
-                  </button>
+                  </a>
                   <button className="px-4 py-3 rounded-xl bg-white/50 border border-border hover:bg-white/80 transition-all flex items-center justify-center gap-2">
                     <Share2 className="w-4 h-4" />
                     <span className="text-sm">Share</span>

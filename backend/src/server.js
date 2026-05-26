@@ -9,7 +9,11 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
-    await connectDB();
+    try {
+      await connectDB();
+    } catch (dbError) {
+      console.warn('Warning: database connection failed. Starting server with fallback mode.');
+    }
 
     const server = app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);

@@ -2,17 +2,18 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import confetti from 'canvas-confetti';
 import { CreditCard, Lock, Check } from 'lucide-react';
-import useRazorpay from "react-razorpay";
+import { useRazorpay } from 'react-razorpay';
 import { authPostJson, getJson } from '@/lib/api';
 
 export function Checkout() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [Razorpay] = useRazorpay();
+  const { Razorpay, error: razorpayError, isLoading: razorpayLoading } = useRazorpay();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [event, setEvent] = useState<any>(null);
   const [error, setError] = useState('');
+  const [ticketQr, setTicketQr] = useState<string | null>(null);
 
   useEffect(() => {
     const loadEvent = async () => {
@@ -41,6 +42,10 @@ export function Checkout() {
       // 1. Create Razorpay Order
       const order = await authPostJson(`/events/${id}/create-order`, {});
       
+      if (!Razorpay) {
+        throw new Error(razorpayError || 'Razorpay checkout is not loaded yet. Please refresh and try again.');
+      }
+
       const options = {
         key: "rzp_test_StonSOA2AB0Ncq", // In production this should be an env var
         amount: order.amount,
@@ -52,7 +57,7 @@ export function Checkout() {
           try {
             setLoading(true);
             // 2. Verify Payment
-            await authPostJson("/events/verify-payment", {
+            const verifyResult = await authPostJson("/events/verify-payment", {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
@@ -60,6 +65,10 @@ export function Checkout() {
             });
 
             confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            // Store QR payload returned from backend (if any)
+            if (verifyResult && verifyResult.qrPayload) {
+              setTicketQr(verifyResult.qrPayload);
+            }
             setStep(2);
             setTimeout(() => {
               navigate('/app/tickets');
@@ -80,7 +89,7 @@ export function Checkout() {
         },
       };
 
-      const rzp = new (window as any).Razorpay(options);
+      const rzp = new Razorpay(options);
       rzp.on('payment.failed', function (response: any) {
         setError(response.error.description);
       });
@@ -101,6 +110,14 @@ export function Checkout() {
           </div>
           <h1 className="text-3xl font-heading font-bold mb-4">Payment Successful!</h1>
           <p className="text-muted-foreground mb-6">Your ticket has been confirmed. Redirecting to tickets...</p>
+          {ticketQr ? (
+            <div className="mx-auto mb-6">
+              <img src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(ticketQr)}&size=300x300`} alt="Ticket QR" className="mx-auto" />
+              <div className="mt-3 text-sm">
+                <a href={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(ticketQr)}&size=600x600`} target="_blank" rel="noreferrer" className="underline">Download QR</a>
+              </div>
+            </div>
+          ) : null}
           <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
             Redirecting...

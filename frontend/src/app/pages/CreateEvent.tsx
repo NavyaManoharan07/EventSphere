@@ -20,6 +20,8 @@ export function CreateEvent() {
   const [networkingEnabled, setNetworkingEnabled] = useState(false);
   const [communityEnabled, setCommunityEnabled] = useState(false);
   const [aiRecommendationsEnabled, setAiRecommendationsEnabled] = useState(false);
+  const [tagsText, setTagsText] = useState('');
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -78,12 +80,43 @@ export function CreateEvent() {
         networkingEnabled,
         communityEnabled,
         aiRecommendationsEnabled,
+        tags: tagsText.split(',').map((tag) => tag.trim()).filter(Boolean),
       });
       navigate('/app/organiser');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create event');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateDescription = async () => {
+    setError('');
+    try {
+      const data = await authPostJson<{ description: string; highlights: string[] }>('/events/ai/generate-description', {
+        title,
+        bullets: description || `${category} event\nNetworking\nUseful takeaways`,
+      });
+      setDescription(data.description);
+      setAiSuggestions(data.highlights || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to generate description');
+    }
+  };
+
+  const buildSchedule = async () => {
+    setError('');
+    try {
+      const data = await authPostJson<{ suggestions: string[] }>('/events/ai/smart-schedule', {
+        sessions: [
+          { title: 'Opening Keynote' },
+          { title: 'Networking Break' },
+          { title: 'Hands-on Session' },
+        ],
+      });
+      setAiSuggestions(data.suggestions || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to build schedule');
     }
   };
 
@@ -118,7 +151,7 @@ export function CreateEvent() {
           <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-heading font-semibold">Event Basics</h2>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white text-sm hover:shadow-lg transition-all">
+              <button type="button" onClick={generateDescription} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white text-sm hover:shadow-lg transition-all">
                 <Sparkles className="w-4 h-4" />
                 Generate with AI
               </button>
@@ -176,6 +209,22 @@ export function CreateEvent() {
                   </select>
                 </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Event Tags</label>
+                <input
+                  value={tagsText}
+                  onChange={(event) => setTagsText(event.target.value)}
+                  placeholder="hackathon, startup, music, weekend"
+                  className="w-full px-4 py-3 rounded-xl bg-white/50 border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+
+              {aiSuggestions.length > 0 && (
+                <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 text-sm text-muted-foreground">
+                  {aiSuggestions.map((item) => <div key={item}>• {item}</div>)}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-2">Event Banner</label>
@@ -275,9 +324,9 @@ export function CreateEvent() {
           <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-heading font-semibold">Ticket Setup</h2>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white text-sm hover:shadow-lg transition-all">
+              <button type="button" onClick={buildSchedule} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white text-sm hover:shadow-lg transition-all">
                 <Sparkles className="w-4 h-4" />
-                One Tier
+                Smart Schedule
               </button>
             </div>
 

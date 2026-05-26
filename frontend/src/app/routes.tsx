@@ -18,6 +18,7 @@ import { CheckIn } from "./pages/CheckIn";
 import { Notifications } from "./pages/Notifications";
 import { Settings } from "./pages/Settings";
 import { Messages } from "./pages/Messages";
+import { Profile } from "./pages/Profile";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 
 export const router = createBrowserRouter([
@@ -120,6 +121,10 @@ export const router = createBrowserRouter([
       {
         path: "messages",
         element: <Messages />,
+      },
+      {
+        path: "profile/:id",
+        element: <Profile />,
       },
     ],
   },

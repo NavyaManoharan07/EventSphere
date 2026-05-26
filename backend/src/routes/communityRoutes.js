@@ -9,6 +9,8 @@ const {
   uploadResource,
   getCommunitySuggestions,
   createConnection,
+  createTeamInvitation,
+  getTeamInvitations,
 } = require('../controllers/communityController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -20,5 +22,7 @@ router.get('/:communityId/suggestions', protect, getCommunitySuggestions);
 router.post('/discussions', protect, createDiscussion);
 router.post('/resources', protect, uploadResource);
 router.post('/connections', protect, createConnection);
+router.get('/team-invitations', protect, getTeamInvitations);
+router.post('/team-invitations', protect, createTeamInvitation);
 
 module.exports = router;

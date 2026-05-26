@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const connectionSchema = new mongoose.Schema({
+const teamInvitationSchema = new mongoose.Schema({
   sender: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -15,23 +15,24 @@ const connectionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Community',
   },
-  matchScore: {
-    type: Number,
-    default: 0,
+  event: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Event',
   },
-  following: {
-    type: Boolean,
-    default: true,
+  message: {
+    type: String,
+    default: '',
+    trim: true,
   },
   status: {
     type: String,
     enum: ['pending', 'accepted', 'declined'],
-    default: 'accepted',
+    default: 'pending',
   },
 }, {
   timestamps: true,
 });
 
-connectionSchema.index({ sender: 1, receiver: 1, community: 1 }, { unique: true });
+teamInvitationSchema.index({ sender: 1, receiver: 1, community: 1, event: 1 }, { unique: true });
 
-module.exports = mongoose.model('Connection', connectionSchema);
+module.exports = mongoose.model('TeamInvitation', teamInvitationSchema);

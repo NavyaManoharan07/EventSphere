@@ -1,18 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { Calendar, MapPin, Users, Clock, Share2, Heart, Bookmark, Sparkles } from 'lucide-react';
-
-const getJson = async (url: string) => {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch ${url}`);
-  return response.json();
-};
+import { authPostJson, getJson } from '@/lib/api';
 
 export function EventDetail() {
   const { id } = useParams();
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -55,6 +53,28 @@ export function EventDetail() {
   const seatsRemaining = event.seatsRemaining != null ? event.seatsRemaining : 0;
   const eventDate = formatDate(event.startDate);
   const eventTime = event.startDate && event.endDate ? `${formatDate(event.startDate)} - ${formatDate(event.endDate)}` : 'TBD';
+  const agenda = event.agenda?.length ? event.agenda : [
+    { time: '10:00 AM', title: 'Registration & Welcome', description: 'Get settled and meet attendees.', type: 'break' },
+    { time: '11:00 AM', title: 'Featured Session', description: 'Curated session from the organizer.', type: 'session' },
+  ];
+  const speakers = event.speakers || [];
+  const faqs = event.faqs || [];
+  const reviews = event.reviews || [];
+
+  const submitReview = async () => {
+    try {
+      await authPostJson(`/events/${id}/reviews`, {
+        rating: reviewRating,
+        comment: reviewComment,
+      });
+      setMessage('Review submitted.');
+      setReviewComment('');
+      const refreshed = await getJson(`/events/${id}`);
+      setEvent(refreshed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to submit review');
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -84,6 +104,7 @@ export function EventDetail() {
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
+          {message && <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div>}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <span className="px-3 py-1 rounded-full text-sm font-medium bg-[#00C2FF]/10 text-[#00C2FF]">
@@ -119,28 +140,86 @@ export function EventDetail() {
             </div>
 
             <p className="text-muted-foreground leading-relaxed">{event.description}</p>
+            {event.tags?.length ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {event.tags.map((tag: string) => (
+                  <span key={tag} className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs">{tag}</span>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
             <h2 className="text-2xl font-heading font-bold mb-6">Event Agenda</h2>
             <div className="space-y-4">
-              <div className="flex gap-4 pb-4 border-b border-border">
-                <div className="text-sm text-muted-foreground w-24 flex-shrink-0">10:00 AM</div>
-                <div className="flex-1">
-                  <h3 className="font-medium mb-1">Registration & Breakfast</h3>
-                  <p className="text-sm text-muted-foreground">Get settled and connect with early attendees.</p>
+              {agenda.map((item: any, index: number) => (
+                <div key={`${item.time}-${index}`} className="flex gap-4 pb-4 border-b border-border">
+                  <div className="text-sm text-muted-foreground w-24 flex-shrink-0">{item.time}</div>
+                  <div className="flex-1">
+                    <h3 className="font-medium mb-1">{item.title}</h3>
+                    <p className="text-sm text-muted-foreground">{item.description}</p>
+                  </div>
+                  <div className="px-3 py-1 rounded-full text-xs font-medium bg-[#7F5AF0]/10 text-[#7F5AF0]">{item.type}</div>
                 </div>
-                <div className="px-3 py-1 rounded-full text-xs font-medium bg-[#7F5AF0]/10 text-[#7F5AF0]">break</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
+              <h2 className="text-xl font-heading font-bold mb-4">Speakers</h2>
+              {speakers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Speaker details will be announced soon.</p>
+              ) : speakers.map((speaker: any) => (
+                <div key={speaker.name} className="p-3 rounded-xl bg-white/50 border border-border mb-3">
+                  <div className="font-medium">{speaker.name}</div>
+                  <div className="text-sm text-muted-foreground">{speaker.role}</div>
+                  <p className="text-sm text-muted-foreground mt-2">{speaker.bio}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
+              <h2 className="text-xl font-heading font-bold mb-4">Venue Map</h2>
+              {event.mapUrl ? (
+                <a href={event.mapUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">Open venue map</a>
+              ) : (
+                <div className="p-6 rounded-xl bg-white/50 border border-border text-sm text-muted-foreground">{event.venue}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
+            <h2 className="text-xl font-heading font-bold mb-4">FAQ</h2>
+            {faqs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No FAQs added yet.</p>
+            ) : faqs.map((faq: any) => (
+              <div key={faq.question} className="pb-4 mb-4 border-b border-border">
+                <div className="font-medium mb-1">{faq.question}</div>
+                <p className="text-sm text-muted-foreground">{faq.answer}</p>
               </div>
-              <div className="flex gap-4 pb-4 border-b border-border">
-                <div className="text-sm text-muted-foreground w-24 flex-shrink-0">11:00 AM</div>
-                <div className="flex-1">
-                  <h3 className="font-medium mb-1">Opening Keynote</h3>
-                  <p className="text-sm text-muted-foreground">Industry leaders share the biggest trends.</p>
-                </div>
-                <div className="px-3 py-1 rounded-full text-xs font-medium bg-[#00C2FF]/10 text-[#00C2FF]">keynote</div>
+            ))}
+          </div>
+
+          <div className="p-6 rounded-2xl bg-white/70 backdrop-blur-lg border border-border">
+            <h2 className="text-xl font-heading font-bold mb-4">Reviews & Ratings</h2>
+            <div className="grid md:grid-cols-[160px_1fr] gap-3 mb-6">
+              <select value={reviewRating} onChange={(event) => setReviewRating(Number(event.target.value))} className="px-3 py-2 rounded-xl bg-white/70 border border-border">
+                {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} stars</option>)}
+              </select>
+              <div className="flex gap-2">
+                <input value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} placeholder="Share your experience..." className="flex-1 px-3 py-2 rounded-xl bg-white/70 border border-border" />
+                <button onClick={submitReview} className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white text-sm">Post</button>
               </div>
             </div>
+            {reviews.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No reviews yet.</p>
+            ) : reviews.map((review: any, index: number) => (
+              <div key={review._id || index} className="p-3 rounded-xl bg-white/50 border border-border mb-3">
+                <div className="font-medium">{review.rating} / 5</div>
+                <p className="text-sm text-muted-foreground">{review.comment || 'No comment provided.'}</p>
+              </div>
+            ))}
           </div>
 
           <div className="p-6 rounded-2xl bg-gradient-to-br from-[#7F5AF0] to-[#00C2FF] text-white">

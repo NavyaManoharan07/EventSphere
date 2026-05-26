@@ -13,6 +13,12 @@ const {
   getEventTickets,
   createRazorpayOrder,
   verifyRazorpayPayment,
+  toggleWishlist,
+  getWishlist,
+  addReview,
+  generateDescription,
+  buildSmartSchedule,
+  getOrganizerIntelligence,
 } = require('../controllers/eventController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -20,10 +26,16 @@ router.get('/my/tickets', protect, getMyTickets);
 router.get('/dashboard/summary', protect, getDashboardSummary);
 router.get('/rewards/summary', protect, getRewardsSummary);
 router.get('/networking/suggestions', protect, getNetworkingSuggestions);
+router.get('/wishlist', protect, getWishlist);
+router.get('/organizer/intelligence', protect, getOrganizerIntelligence);
+router.post('/ai/generate-description', protect, generateDescription);
+router.post('/ai/smart-schedule', protect, buildSmartSchedule);
 router.post('/checkin', protect, checkInTicket);
 router.get('/', getEvents);
 router.post('/', protect, createEvent);
 router.get('/:eventId', getEventById);
+router.post('/:eventId/wishlist', protect, toggleWishlist);
+router.post('/:eventId/reviews', protect, addReview);
 router.post('/:eventId/book', protect, bookTicket);
 router.post('/:eventId/create-order', protect, createRazorpayOrder);
 router.post('/verify-payment', protect, verifyRazorpayPayment);

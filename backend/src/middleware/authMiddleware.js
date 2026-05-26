@@ -13,20 +13,16 @@ const protect = async (req, res, next) => {
     req.headers.authorization.startsWith('Bearer')
   ) {
     try {
-      // Get token from header
       token = req.headers.authorization.split(' ')[1];
 
-      // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       const dbConnected = mongoose.connection.readyState === 1;
-
-      // Try to get user from DB first, then fall back to in-memory
       let user;
+
       if (dbConnected) {
         user = await User.findById(decoded.id).select('-password');
       } else {
-        // Use in-memory fallback
         user = localUsers[decoded.id];
       }
 
@@ -37,6 +33,29 @@ const protect = async (req, res, next) => {
       req.user = user;
       return next();
     } catch (error) {
+      // If a local token was provided and we have that mapping, accept it
+      if (token && localUsers[token]) {
+        req.user = localUsers[token];
+        return next();
+      }
+
+      // Allow frontend to send a base64-encoded local user in `X-Local-User` header
+      const encodedLocal = req.headers['x-local-user'] || req.headers['X-Local-User'];
+      if (encodedLocal) {
+        try {
+          const raw = Buffer.from(encodedLocal, 'base64').toString('utf8');
+          const parsed = JSON.parse(raw);
+          // ensure token is present on parsed user
+          if (token && !parsed.token) parsed.token = token;
+          // persist to in-memory store for future requests
+          if (parsed) storeLocalUser(parsed);
+          req.user = parsed;
+          return next();
+        } catch (e) {
+          // fall through to error
+        }
+      }
+
       console.error('Auth error:', error);
       return res.status(401).json({ message: 'Not authorized' });
     }
@@ -50,6 +69,12 @@ const protect = async (req, res, next) => {
 // Store user for offline mode (called from authController after registration/login)
 const storeLocalUser = (user) => {
   localUsers[user._id] = user;
+  if (user.email) {
+    localUsers[user.email] = user;
+  }
+  if (user.token) {
+    localUsers[user.token] = user;
+  }
 };
 
 module.exports = { protect, storeLocalUser, localUsers };

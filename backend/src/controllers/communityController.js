@@ -3,6 +3,8 @@ const Discussion = require('../models/Discussion');
 const Connection = require('../models/Connection');
 const Ticket = require('../models/Ticket');
 const User = require('../models/User');
+const TeamInvitation = require('../models/TeamInvitation');
+const Notification = require('../models/Notification');
 
 const cleanText = (value, fallback = '') => String(value || fallback).trim();
 
@@ -384,12 +386,39 @@ exports.getCommunitySuggestions = async (req, res, next) => {
 
 exports.createConnection = async (req, res, next) => {
   try {
+    const receiverId = req.body.receiverId;
+
+    if (!receiverId) {
+      return res.status(400).json({ message: 'Receiver is required' });
+    }
+
+    if (receiverId.toString() === req.user.id.toString()) {
+      return res.status(400).json({ message: 'You cannot connect with yourself' });
+    }
+
+    const existing = await Connection.findOne({
+      $or: [
+        { sender: req.user.id, receiver: receiverId },
+        { sender: receiverId, receiver: req.user.id },
+      ],
+    });
+
+    if (existing) {
+      existing.status = 'accepted';
+      existing.following = true;
+      existing.matchScore = Number(req.body.matchScore) || existing.matchScore;
+      if (req.body.communityId) existing.community = req.body.communityId;
+      await existing.save();
+      return res.status(200).json(existing);
+    }
+
     const connection = await Connection.create({
       sender: req.user.id,
-      receiver: req.body.receiverId,
-      community: req.body.communityId,
+      receiver: receiverId,
+      community: req.body.communityId || undefined,
       matchScore: Number(req.body.matchScore) || 0,
-      status: 'pending',
+      status: 'accepted',
+      following: true,
     });
 
     return res.status(201).json(connection);
@@ -397,6 +426,64 @@ exports.createConnection = async (req, res, next) => {
     if (error.code === 11000) {
       return res.status(400).json({ message: 'Connection request already exists' });
     }
+    next(error);
+  }
+};
+
+exports.createTeamInvitation = async (req, res, next) => {
+  try {
+    const receiverId = req.body.receiverId;
+    if (!receiverId) {
+      return res.status(400).json({ message: 'Receiver is required' });
+    }
+
+    const existing = await TeamInvitation.findOne({
+      sender: req.user.id,
+      receiver: receiverId,
+      community: req.body.communityId || null,
+      event: req.body.eventId || null,
+    });
+
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
+    const invitation = await TeamInvitation.create({
+      sender: req.user.id,
+      receiver: receiverId,
+      community: req.body.communityId || undefined,
+      event: req.body.eventId || undefined,
+      message: req.body.message || 'Want to team up for this opportunity?',
+    });
+
+    await Notification.create({
+      user: receiverId,
+      type: 'network',
+      title: 'Team invitation',
+      message: invitation.message,
+      link: '/app/communities',
+    });
+
+    return res.status(201).json(invitation);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getTeamInvitations = async (req, res, next) => {
+  try {
+    const invitations = await TeamInvitation.find({
+      $or: [{ sender: req.user.id }, { receiver: req.user.id }],
+    })
+      .populate('sender', 'name profilePhoto')
+      .populate('receiver', 'name profilePhoto')
+      .populate('community', 'name')
+      .populate('event', 'title')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json(invitations);
+  } catch (error) {
     next(error);
   }
 };
