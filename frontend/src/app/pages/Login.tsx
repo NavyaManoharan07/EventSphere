@@ -48,13 +48,13 @@ export function Login() {
     try {
       const user = await postJson('/auth/login', { email, password });
       localStorage.setItem('token', user.token);
-      navigate('/app');
+      navigate(user.onboardingCompleted ? '/app' : '/onboarding');
     } catch (err) {
       if (isOfflineAuthError(err)) {
         const user = validateLocalUser(email, password);
         if (user) {
           localStorage.setItem('token', 'local-fallback-token');
-          navigate('/app');
+          navigate('/onboarding');
         } else {
           setError('Backend unavailable. Local sign-in failed too.');
         }

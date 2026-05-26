@@ -1,16 +1,23 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Sparkles, Briefcase, Music, Check } from 'lucide-react';
+import { authPutJson } from '@/lib/api';
 
 export function Onboarding() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
   const [eventType, setEventType] = useState<string>('');
+  const [city, setCity] = useState('');
+  const [networkingEnabled, setNetworkingEnabled] = useState(true);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const interests = [
-    'Technology', 'Business', 'Marketing', 'Design', 'Music', 'Art',
-    'Sports', 'Food & Drink', 'Health & Wellness', 'Education', 'Gaming', 'Fashion'
+    'AI', 'Startups', 'Music', 'Gaming', 'Business', 'Photography',
+    'Hackathons', 'Finance', 'Sports', 'Comedy', 'Movies', 'Design',
+    'Cybersecurity', 'Web Development', 'Dance', 'Singing', 'Fitness', 'Education'
   ];
 
   const goals = [
@@ -28,6 +35,68 @@ export function Onboarding() {
     setSelectedGoals(prev =>
       prev.includes(goal) ? prev.filter(g => g !== goal) : [...prev, goal]
     );
+  };
+
+  const getMappedGoals = () => {
+    const mapping: Record<string, string> = {
+      'Find a job': 'Career',
+      'Grow my network': 'Networking',
+      'Learn new skills': 'Learning',
+      'Find collaborators': 'Networking',
+      'Meet new people': 'Networking',
+      'Discover events': 'Community',
+      'Have fun': 'Entertainment',
+      'Build my career': 'Career',
+    };
+
+    return Array.from(new Set(selectedGoals.map((goal) => mapping[goal] || goal)));
+  };
+
+  const canContinue = () => {
+    if (step === 1) return selectedInterests.length > 0;
+    if (step === 2) return selectedGoals.length > 0 && city.trim();
+    if (step === 4) return Boolean(eventType);
+    return true;
+  };
+
+  const goNext = () => {
+    if (!canContinue()) {
+      setError(step === 2 ? 'Please select at least one goal and enter your city.' : 'Please choose at least one option.');
+      return;
+    }
+
+    setError('');
+    setStep((current) => Math.min(current + 1, 4));
+  };
+
+  const finishSetup = async () => {
+    if (!canContinue()) {
+      setError('Please choose your event preference.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await authPutJson('/auth/profile', {
+        interests: selectedInterests,
+        goals: getMappedGoals(),
+        city,
+        networkingEnabled,
+        eventPreference: eventType === 'both'
+          ? 'Both'
+          : eventType === 'career'
+            ? 'Career'
+            : 'Entertainment',
+        onboardingCompleted: true,
+      });
+      navigate('/app');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save your AI profile');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,6 +127,12 @@ export function Onboarding() {
               ></div>
             </div>
           </div>
+
+          {error && (
+            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
           {/* Step 1: Select Interests */}
           {step === 1 && (
@@ -105,6 +180,17 @@ export function Onboarding() {
                     {goal}
                   </button>
                 ))}
+              </div>
+              <div className="mb-8">
+                <label className="block text-sm font-medium mb-2">Your city</label>
+                <input
+                  value={city}
+                  onChange={(event) => setCity(event.target.value)}
+                  type="text"
+                  placeholder="Chennai"
+                  className="w-full px-4 py-3 rounded-xl bg-white/50 border border-border focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">Used for nearby events and local networking suggestions.</p>
               </div>
             </div>
           )}
@@ -155,6 +241,28 @@ export function Onboarding() {
                     </div>
                   </div>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-8">
+                <button
+                  onClick={() => setNetworkingEnabled(true)}
+                  className={`px-4 py-3 rounded-xl border transition-all ${
+                    networkingEnabled
+                      ? 'bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white border-transparent shadow-lg'
+                      : 'bg-white/50 border-border hover:bg-white/80'
+                  }`}
+                >
+                  Yes, enable AI networking
+                </button>
+                <button
+                  onClick={() => setNetworkingEnabled(false)}
+                  className={`px-4 py-3 rounded-xl border transition-all ${
+                    !networkingEnabled
+                      ? 'bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white border-transparent shadow-lg'
+                      : 'bg-white/50 border-border hover:bg-white/80'
+                  }`}
+                >
+                  No, just events
+                </button>
               </div>
             </div>
           )}
@@ -247,18 +355,19 @@ export function Onboarding() {
 
             {step < 4 ? (
               <button
-                onClick={() => setStep(step + 1)}
+                onClick={goNext}
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white hover:shadow-xl hover:shadow-primary/30 transition-all"
               >
                 Continue
               </button>
             ) : (
-              <Link
-                to="/app"
+              <button
+                onClick={finishSetup}
+                disabled={loading}
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white hover:shadow-xl hover:shadow-primary/30 transition-all"
               >
-                Finish Setup
-              </Link>
+                {loading ? 'Saving...' : 'Finish Setup'}
+              </button>
             )}
           </div>
         </div>

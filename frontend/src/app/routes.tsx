@@ -17,6 +17,7 @@ import { CreateEvent } from "./pages/CreateEvent";
 import { CheckIn } from "./pages/CheckIn";
 import { Notifications } from "./pages/Notifications";
 import { Settings } from "./pages/Settings";
+import { Messages } from "./pages/Messages";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 
 export const router = createBrowserRouter([
@@ -65,6 +66,14 @@ export const router = createBrowserRouter([
         element: <MyTickets />,
       },
       {
+        path: "mytickets",
+        element: <MyTickets />,
+      },
+      {
+        path: "my-tickets",
+        element: <MyTickets />,
+      },
+      {
         path: "networking",
         element: <NetworkingHub />,
       },
@@ -78,6 +87,18 @@ export const router = createBrowserRouter([
       },
       {
         path: "organiser",
+        element: <OrganiserDashboard />,
+      },
+      {
+        path: "organizer",
+        element: <OrganiserDashboard />,
+      },
+      {
+        path: "organiser-mode",
+        element: <OrganiserDashboard />,
+      },
+      {
+        path: "organizer-mode",
         element: <OrganiserDashboard />,
       },
       {
@@ -95,6 +116,10 @@ export const router = createBrowserRouter([
       {
         path: "settings",
         element: <Settings />,
+      },
+      {
+        path: "messages",
+        element: <Messages />,
       },
     ],
   },

@@ -20,6 +20,69 @@ const userSchema = new mongoose.Schema({
     minlength: 6,
     select: false,
   },
+  profilePhoto: {
+    type: String,
+    default: '',
+  },
+  city: {
+    type: String,
+    default: '',
+    trim: true,
+  },
+  bio: {
+    type: String,
+    default: '',
+    trim: true,
+  },
+  interests: {
+    type: [String],
+    default: [],
+  },
+  goals: {
+    type: [String],
+    default: [],
+  },
+  eventPreference: {
+    type: String,
+    enum: ['Career', 'Entertainment', 'Both', ''],
+    default: '',
+  },
+  networkingEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  profileVisible: {
+    type: Boolean,
+    default: true,
+  },
+  shareEventAttendance: {
+    type: Boolean,
+    default: true,
+  },
+  onboardingCompleted: {
+    type: Boolean,
+    default: false,
+  },
+  behavior: {
+    viewedEvents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Event' }],
+    savedEvents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Event' }],
+    searchHistory: {
+      type: [String],
+      default: [],
+    },
+    joinedCommunities: {
+      type: [String],
+      default: [],
+    },
+    reviewsGiven: {
+      type: Number,
+      default: 0,
+    },
+    connectionsMade: {
+      type: Number,
+      default: 0,
+    },
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -27,19 +90,14 @@ const userSchema = new mongoose.Schema({
 });
 
 // Encrypt password using bcrypt before saving
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   // Only hash if password is new or modified
   if (!this.isModified('password')) {
-    return next();
+    return;
   }
 
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
 });
 
 // Match user entered password to hashed password in database

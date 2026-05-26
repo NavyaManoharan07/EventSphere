@@ -1,16 +1,32 @@
-import { Sparkles, Users, MessageSquare, Briefcase, MapPin } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
+import { Sparkles, Users, MessageSquare, MapPin } from 'lucide-react';
+import { authGetJson } from '@/lib/api';
 
 export function NetworkingHub() {
-  const recommendations = [
-    { id: 1, name: 'Sarah Chen', role: 'AI Research Lead', company: 'TechCorp', match: 95, reason: 'Shared interest in AI & Machine Learning', mutualConnections: 12 },
-    { id: 2, name: 'Mike Johnson', role: 'Startup Founder', company: 'StartupX', match: 88, reason: 'Attending same events', mutualConnections: 8 },
-    { id: 3, name: 'Emily Davis', role: 'Product Designer', company: 'DesignCo', match: 92, reason: 'Similar career goals', mutualConnections: 15 },
-  ];
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const nearbyAttendees = [
-    { name: 'Alex Park', event: 'AI Summit 2026', distance: '0.5 mi' },
-    { name: 'Jordan Lee', event: 'Tech Conference', distance: '1.2 mi' },
-  ];
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const data = await authGetJson<{ suggestions: any[] }>('/events/networking/suggestions');
+        setRecommendations(data.suggestions || []);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to load networking suggestions');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSuggestions();
+  }, []);
+
+  const nearbyAttendees = recommendations.filter((person) => person.city).slice(0, 2);
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -27,8 +43,8 @@ export function NetworkingHub() {
               <Users className="w-5 h-5 text-[#00C2FF]" />
             </div>
             <div>
-              <div className="text-2xl font-heading font-bold">48</div>
-              <div className="text-sm text-muted-foreground">Connections</div>
+              <div className="text-2xl font-heading font-bold">{recommendations.filter((person) => person.sharedEvents > 0).length}</div>
+              <div className="text-sm text-muted-foreground">Warm Matches</div>
             </div>
           </div>
         </div>
@@ -39,7 +55,7 @@ export function NetworkingHub() {
               <Sparkles className="w-5 h-5 text-[#7F5AF0]" />
             </div>
             <div>
-              <div className="text-2xl font-heading font-bold">24</div>
+              <div className="text-2xl font-heading font-bold">{recommendations.length}</div>
               <div className="text-sm text-muted-foreground">AI Matches</div>
             </div>
           </div>
@@ -51,8 +67,8 @@ export function NetworkingHub() {
               <MessageSquare className="w-5 h-5 text-[#2CB67D]" />
             </div>
             <div>
-              <div className="text-2xl font-heading font-bold">156</div>
-              <div className="text-sm text-muted-foreground">Messages</div>
+              <div className="text-2xl font-heading font-bold">{recommendations.reduce((total, person) => total + (person.sharedEvents || 0), 0)}</div>
+              <div className="text-sm text-muted-foreground">Shared Events</div>
             </div>
           </div>
         </div>
@@ -70,8 +86,16 @@ export function NetworkingHub() {
             </div>
 
             <div className="space-y-4">
-              {recommendations.map(person => (
-                <div key={person.id} className="p-4 rounded-xl bg-white/50 border border-border hover:shadow-lg transition-all">
+              {loading ? (
+                <div className="p-4 rounded-xl bg-white/50 border border-border">Loading AI matches...</div>
+              ) : error ? (
+                <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700">{error}</div>
+              ) : recommendations.length === 0 ? (
+                <div className="p-4 rounded-xl bg-white/50 border border-border text-sm text-muted-foreground">
+                  No AI networking matches yet. Add interests in Settings or attend events to improve matches.
+                </div>
+              ) : recommendations.map(person => (
+                <div key={person.id || person._id} className="p-4 rounded-xl bg-white/50 border border-border hover:shadow-lg transition-all">
                   <div className="flex items-start gap-4">
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#7F5AF0] to-[#00C2FF] flex-shrink-0"></div>
 
@@ -79,7 +103,7 @@ export function NetworkingHub() {
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <h3 className="font-heading font-semibold">{person.name}</h3>
-                          <p className="text-sm text-muted-foreground">{person.role} at {person.company}</p>
+                          <p className="text-sm text-muted-foreground">{person.bio || person.city || 'EventSphere member'}</p>
                         </div>
                         <div className="px-3 py-1 rounded-full bg-gradient-to-r from-[#7F5AF0] to-[#00C2FF] text-white text-xs font-medium whitespace-nowrap">
                           {person.match}% Match
@@ -93,7 +117,7 @@ export function NetworkingHub() {
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Users className="w-4 h-4" />
-                          <span>{person.mutualConnections} mutual connections</span>
+                          <span>{person.sharedEvents || 0} shared events</span>
                         </div>
                       </div>
 
@@ -104,9 +128,12 @@ export function NetworkingHub() {
                         <button className="px-4 py-2 rounded-lg bg-white/50 border border-border text-sm hover:bg-white/80 transition-all">
                           View Profile
                         </button>
-                        <button className="px-4 py-2 rounded-lg bg-white/50 border border-border text-sm hover:bg-white/80 transition-all">
+                        <Link 
+                          to={`/app/messages?user=${person.id || person._id}`}
+                          className="px-4 py-2 rounded-lg bg-white/50 border border-border text-sm hover:bg-white/80 transition-all"
+                        >
                           Message
-                        </button>
+                        </Link>
                       </div>
                     </div>
                   </div>
@@ -136,16 +163,18 @@ export function NetworkingHub() {
               <h3 className="font-heading font-semibold">Nearby Attendees</h3>
             </div>
             <div className="space-y-3 mb-4">
-              {nearbyAttendees.map((person, i) => (
+              {nearbyAttendees.length === 0 ? (
+                <div className="p-3 rounded-xl bg-white/20 backdrop-blur text-sm">Add your city in Settings to discover local matches.</div>
+              ) : nearbyAttendees.map((person, i) => (
                 <div key={i} className="p-3 rounded-xl bg-white/20 backdrop-blur">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-10 h-10 rounded-full bg-white/30"></div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium">{person.name}</div>
-                      <div className="text-xs text-white/80 truncate">{person.event}</div>
+                      <div className="text-xs text-white/80 truncate">{person.city}</div>
                     </div>
                   </div>
-                  <div className="text-xs text-white/80">{person.distance} away</div>
+                  <div className="text-xs text-white/80">{person.match}% AI match</div>
                 </div>
               ))}
             </div>

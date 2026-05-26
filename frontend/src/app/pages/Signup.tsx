@@ -60,7 +60,7 @@ export function Signup() {
     try {
       const user = await postJson('/auth/signup', { name, email, password });
       localStorage.setItem('token', user.token);
-      navigate('/app');
+      navigate('/onboarding');
     } catch (err) {
       if (isOfflineAuthError(err)) {
         const users = getLocalUsers();
@@ -71,7 +71,7 @@ export function Signup() {
 
         saveLocalUser({ name, email, password });
         localStorage.setItem('token', 'local-fallback-token');
-        navigate('/app');
+        navigate('/onboarding');
       } else {
         setError(err instanceof Error ? err.message : 'Unable to create account');
       }
